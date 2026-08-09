@@ -2,6 +2,7 @@
 # break the shebang ("bad interpreter: /usr/bin/env bash^M") when copied across, so pin them
 # to LF regardless of core.autocrlf.
 *.sh text eol=lf
+*.conf text eol=lf
 
 # Brand assets: no line-ending conversion.
 *.png binary
