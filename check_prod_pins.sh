@@ -14,35 +14,44 @@
 set -uo pipefail
 
 TOKEN="$(cat /root/.coolify_token)"
-BASE="https://coolify.slapstat.com/api/v1"
+BASE="http://localhost:8000/api/v1"
 PROBLEMS=0
 
-while IFS='=' read -r REPO UUID; do
+# prod_app_uuids.txt is whitespace-separated: "repo  uuid".
+while read -r REPO UUID _; do
   [ -z "${REPO:-}" ] && continue
   case "$REPO" in \#*) continue ;; esac
 
   APP="$(curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/applications/$UUID" || true)"
-  if [ -z "$APP" ]; then
-    echo "ERROR  $REPO: could not read application $UUID"
+  if [ -z "$APP" ] || [ "$(jq -r '.uuid // ""' <<< "$APP")" = "" ]; then
+    echo "ERROR  $REPO: no such application ($UUID) — stale entry in prod_app_uuids.txt?"
     PROBLEMS=$((PROBLEMS + 1))
     continue
   fi
 
   SHA="$(jq -r '.git_commit_sha // ""' <<< "$APP")"
   BRANCH="$(jq -r '.git_branch // ""' <<< "$APP")"
-  AUTO="$(jq -r '.settings.is_auto_deploy_enabled // false' <<< "$APP")"
 
+  DEPLOYMENTS="$(curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/deployments/applications/$UUID" || echo '{}')"
+  LAST_COMMIT="$(jq -r '.deployments[0].commit // ""' <<< "$DEPLOYMENTS")"
+  WEBHOOKED="$(jq -r '[.deployments[]? | select(.is_webhook == true)] | length' <<< "$DEPLOYMENTS")"
+
+  CLEAN=1
   if [ -z "$SHA" ] || [ "$SHA" = "HEAD" ]; then
     echo "UNPINNED  $REPO (branch '$BRANCH') — next deploy would build the tip of '$BRANCH'"
-    PROBLEMS=$((PROBLEMS + 1))
+    PROBLEMS=$((PROBLEMS + 1)); CLEAN=0
   fi
-  if [ "$AUTO" = "true" ]; then
-    echo "AUTODEPLOY  $REPO — a merge to '$BRANCH' deploys straight to production"
-    PROBLEMS=$((PROBLEMS + 1))
+  # The application API exposes no auto-deploy flag, so look for its footprint instead.
+  if [ "${WEBHOOKED:-0}" -gt 0 ]; then
+    echo "AUTODEPLOY  $REPO — $WEBHOOKED webhook-triggered deployment(s); a push can reach production"
+    PROBLEMS=$((PROBLEMS + 1)); CLEAN=0
   fi
-  if [ -n "$SHA" ] && [ "$SHA" != "HEAD" ] && [ "$AUTO" != "true" ]; then
-    echo "ok  $REPO  branch=$BRANCH  sha=${SHA:0:7}"
+  # What is running must be what was promoted. prod-web drifted exactly here in Aug 2026.
+  if [ -n "$SHA" ] && [ -n "$LAST_COMMIT" ] && [ "$SHA" != "$LAST_COMMIT" ]; then
+    echo "DRIFT  $REPO — pinned ${SHA:0:7} but last deployed ${LAST_COMMIT:0:7}"
+    PROBLEMS=$((PROBLEMS + 1)); CLEAN=0
   fi
+  [ "$CLEAN" = "1" ] && echo "ok  $REPO  branch=$BRANCH  sha=${SHA:0:7}"
 done < /root/prod_app_uuids.txt
 
 if [ "$PROBLEMS" -gt 0 ]; then

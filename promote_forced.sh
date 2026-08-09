@@ -34,11 +34,13 @@ if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "refused: bad version '$VERSION'" >&2; exit 1
 fi
 
-UUID="$(grep -E "^${REPO}=" /root/prod_app_uuids.txt 2>/dev/null | head -1 | cut -d= -f2 || true)"
+# prod_app_uuids.txt is whitespace-separated ("repo  uuid"), unlike the staging map's "repo=uuid".
+UUID="$(awk -v r="$REPO" '$1==r{print $2}' /root/prod_app_uuids.txt 2>/dev/null || true)"
 if [ -z "$UUID" ]; then echo "refused: no prod UUID mapped for '$REPO'" >&2; exit 1; fi
 
 TOKEN="$(cat /root/.coolify_token)"
-BASE="https://coolify.slapstat.com/api/v1"
+# Coolify runs on this host; go straight to it rather than out through Traefik and the IP gate.
+BASE="http://localhost:8000/api/v1"
 
 api() {
   curl -fsS -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"
@@ -60,10 +62,12 @@ if [ "$GOT_SHA" != "$SHA" ] || [ "$GOT_BRANCH" != "$VERSION" ]; then
   exit 1
 fi
 
-# 3. Refuse to promote an app that Coolify would also deploy on its own. Auto-deploy on a
-#    prod app means a merge to master can reach production without going through a release.
-if [ "$(jq -r '.settings.is_auto_deploy_enabled // false' <<< "$APP")" = "true" ]; then
-  echo "refused: auto-deploy is ON for $REPO in production — turn it off first" >&2
+# 3. Refuse to promote an app that Coolify has been deploying on its own. The application API
+#    does not expose the auto-deploy flag at all, so this looks at the evidence instead: a
+#    recent webhook-triggered deployment means a push reached production without a release.
+if curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/deployments/applications/$UUID" \
+     | jq -e '[.deployments[]? | select(.is_webhook == true)] | length > 0' >/dev/null; then
+  echo "refused: $REPO has webhook-triggered deployments in production — turn auto-deploy off first" >&2
   exit 1
 fi
 
