@@ -198,8 +198,8 @@ UUIDs live in `/root/prod_app_uuids.txt`.
 > So an app on `git_branch: master` rebuilds **whatever master has become** the next time
 > anyone redeploys it — no release, no promotion, no warning. That is how production ended up
 > running `master` in August 2026 while its "pin" still read `v0.83.0`, and why every promotion
-> moves the branch to an immutable tag instead. `/root/check_prod_pins.sh` (cron) fails if any
-> prod app is on a branch rather than a `vX.Y.Z` tag, or shows webhook-triggered deployments.
+> moves the branch to an immutable tag instead. The protection lives in that one field: if an
+> app's `git_branch` is ever set back to a branch name, it will follow that branch again.
 >
 > The old `/root/promote_prod.sh` pinned only the inert commit field and is now `.deprecated`.
 > Its August run is what shipped the wrong code: it stamped `APP_VERSION=v0.83.0`, pinned
@@ -306,7 +306,7 @@ the `POSTHOG_KEY` build arg (empty ⇒ analytics off, and `posthog-js` isn't eve
 | Ship to **staging** | Just merge the PR to `master` — staging deploys + a tag and a **draft** release are created. |
 | Ship to **production** | **Publish that version's GitHub Release.** `promote-to-prod.yml` pins, deploys and verifies. |
 | **Roll back** prod | Run `promote-to-prod` manually (`workflow_dispatch`) with the older tag. |
-| Check prod isn't drifting | `/root/check_prod_pins.sh` on the prod server — fails if any app is unpinned or auto-deploying. |
+| Check prod isn't drifting | `check_prod_pins.sh` (in this repo, not installed) — copy it to the prod server and run it; it fails if any app is on a branch rather than a `vX.Y.Z` tag, or shows webhook-triggered deployments. |
 | Refresh **NHL data** | `POST /api/v1/sync` on the nhl-service (API-key protected); re-run after rosters update. |
 | **Change** the allowed IP (dev gate) | `ALLOW_IP=<ip> /root/ip-allowlist.sh` on both servers. |
 | **Go public** (launch) | `FLUSH=1 /root/ip-allowlist.sh` + disable `ip-allowlist.service` on prod. |
