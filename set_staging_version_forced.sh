@@ -15,7 +15,11 @@
 #   /root/staging_app_uuids.txt     — "repo=uuid" per line, e.g. fantasy-web=abc123.
 #   APP_VERSION env pre-created on each staging app in Coolify, with the right flag:
 #     fantasy-web  -> Build-time variable (it is baked into the static bundle)
-#     the 4 Java services -> Runtime variable (read at startup via ${APP_VERSION:dev})
+#     every other service -> Runtime variable (read at startup via ${APP_VERSION:dev});
+#       that covers the Java services and the Python fantasy-projection-service.
+#
+# Keep the repo list below in sync with /root/promote_forced.sh. fantasy-nhl-service was
+# retired in 2026 (its Coolify app no longer exists) and is deliberately absent.
 set -euo pipefail
 
 read -r REPO VERSION _ <<< "${SSH_ORIGINAL_COMMAND:-}"

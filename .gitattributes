@@ -1,4 +1,8 @@
-# The forced-command scripts are installed on the Linux prod server. A CRLF working copy on
-# Windows would produce "bad interpreter: /usr/bin/env bash^M" when copied straight across,
-# so keep them LF everywhere.
+# The forced-command scripts run on the Linux servers. A CRLF working copy on Windows would
+# break the shebang ("bad interpreter: /usr/bin/env bash^M") when copied across, so pin them
+# to LF regardless of core.autocrlf.
 *.sh text eol=lf
+
+# Brand assets: no line-ending conversion.
+*.png binary
+*.ico binary
