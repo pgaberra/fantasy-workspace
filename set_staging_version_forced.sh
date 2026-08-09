@@ -21,7 +21,7 @@ set -euo pipefail
 read -r REPO VERSION _ <<< "${SSH_ORIGINAL_COMMAND:-}"
 
 case "$REPO" in
-  fantasy-web|fantasy-bff|fantasy-db-service|fantasy-nhl-service|fantasy-yahoo-service) ;;
+  fantasy-web|fantasy-bff|fantasy-db-service|fantasy-espn-service|fantasy-projection-service|fantasy-yahoo-service) ;;
   *) echo "refused: unknown repo '$REPO'" >&2; exit 1 ;;
 esac
 if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then

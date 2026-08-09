@@ -170,24 +170,34 @@ other repos.)
 
 ### On merge to `master`
 1. `.github/workflows/tag-on-merge.yml` reads the squash commit (= PR title) and creates a
-   **SemVer tag + GitHub Release**: `feat:` → minor, `fix:`/`chore:`/anything → patch,
+   **SemVer tag + a DRAFT GitHub Release**: `feat:` → minor, `fix:`/`chore:`/anything → patch,
    `BREAKING CHANGE`/`!` → major. Every merge gets a tag; versions are **per-repo** (baseline
-   `v0.1.0`).
-2. **Staging auto-deploys.** Each staging app has Coolify `auto-deploy = ON` and follows the
-   branch tip (`git_commit_sha = HEAD`), so the push triggers a rebuild → staging runs latest
-   `master`.
-3. **Production does NOT move.** Prod apps have `auto-deploy = OFF`.
+   `v0.1.0`). The release stays a draft — it is a *candidate*, not a shipment.
+2. **Staging deploys**, via the same workflow: it stamps `APP_VERSION` on the staging app and
+   redeploys it through `/root/set_staging_version_forced.sh`.
+3. **Production does NOT move.** Prod apps have `auto-deploy = OFF` and a pinned commit.
 
-### Promoting to production (manual, version-pinned)
-Prod runs a **chosen, pinned version** until you deliberately promote a new one (this also
-enables rollback). The promotion:
-- pins the prod app's `git_commit_sha` to the chosen tag's commit, then deploys it;
-- helper on the prod server: `/root/promote_prod.sh <prod-app-uuid> <commit-sha> <label>`;
-- the prod app UUIDs are listed in `/root/prod_app_uuids.txt`.
+### Promoting to production (publish the release)
+**Publishing a version's GitHub Release is the promotion.** That is the one deliberate act;
+nothing else moves production. `promote-to-prod.yml` runs on `release: published` (and still
+accepts a manual `workflow_dispatch` with a tag, which is how you roll back to an older one).
 
-**Typical release flow:** merge PRs → staging updates automatically + a new tag appears (e.g.
-`v0.2.0`) → test on staging → when happy, promote that tag to prod. To roll back, promote an
-older tag.
+It resolves the tag to its commit and calls `/root/promote_forced.sh <repo> <sha> <version>`
+over a restricted SSH key. That script pins `git_branch` (to the tag) **and**
+`git_commit_sha`, verifies the pin stuck *before* deploying, deploys, and then verifies that
+the commit which actually landed is the one asked for — failing loudly otherwise. Prod app
+UUIDs live in `/root/prod_app_uuids.txt`.
+
+> **Why the verification exists.** Coolify chooses the commit to build as
+> `$commit ?: ($application->git_commit_sha ?: 'HEAD')`, and neither the Redeploy button nor
+> the deploy API passes a commit. An app whose pin is empty or `HEAD` therefore builds the
+> **branch tip** on any redeploy — which is how production silently ended up running `master`
+> in August 2026. `/root/check_prod_pins.sh` (cron) fails if any prod app is unpinned or has
+> auto-deploy on.
+
+**Typical release flow:** merge PRs → staging updates + a draft release appears (e.g.
+`v0.2.0`) → test on staging → publish that release → prod is promoted and verified. To roll
+back, run `promote-to-prod` manually with an older tag.
 
 ### OpenAPI-first
 All inter-service HTTP uses **generated typed clients** from each service's OpenAPI spec
@@ -276,9 +286,10 @@ the `POSTHOG_KEY` build arg (empty ⇒ analytics off, and `posthog-js` isn't eve
 
 | I want to… | How |
 |---|---|
-| Ship to **staging** | Just merge the PR to `master` — staging auto-deploys + a new tag is created. |
-| Ship to **production** | Promote a tag: pin `git_commit_sha` to that tag's commit + deploy (`/root/promote_prod.sh`, UUIDs in `/root/prod_app_uuids.txt`). |
-| **Roll back** prod | Promote an older tag the same way. |
+| Ship to **staging** | Just merge the PR to `master` — staging deploys + a tag and a **draft** release are created. |
+| Ship to **production** | **Publish that version's GitHub Release.** `promote-to-prod.yml` pins, deploys and verifies. |
+| **Roll back** prod | Run `promote-to-prod` manually (`workflow_dispatch`) with the older tag. |
+| Check prod isn't drifting | `/root/check_prod_pins.sh` on the prod server — fails if any app is unpinned or auto-deploying. |
 | Refresh **NHL data** | `POST /api/v1/sync` on the nhl-service (API-key protected); re-run after rosters update. |
 | **Change** the allowed IP (dev gate) | `ALLOW_IP=<ip> /root/ip-allowlist.sh` on both servers. |
 | **Go public** (launch) | `FLUSH=1 /root/ip-allowlist.sh` + disable `ip-allowlist.service` on prod. |

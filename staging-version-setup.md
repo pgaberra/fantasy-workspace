@@ -18,7 +18,7 @@ ssh-keygen -t ed25519 -N '' -f ./staging-version-key -C 'staging-version'
 - **Private half** (`staging-version-key`): add as the secret `STAGING_VERSION_SSH_KEY` in all
   five repos:
   ```bash
-  for r in fantasy-web fantasy-bff fantasy-db-service fantasy-nhl-service fantasy-yahoo-service; do
+  for r in fantasy-web fantasy-bff fantasy-db-service fantasy-espn-service fantasy-projection-service fantasy-yahoo-service; do
     gh secret set STAGING_VERSION_SSH_KEY --repo pgaberra/$r < ./staging-version-key
   done
   ```
@@ -41,7 +41,8 @@ On the prod server, create `/root/staging_app_uuids.txt` (get the UUIDs from Coo
 fantasy-web=<staging-web-uuid>
 fantasy-bff=<staging-bff-uuid>
 fantasy-db-service=<staging-db-uuid>
-fantasy-nhl-service=<staging-nhl-uuid>
+fantasy-espn-service=<staging-espn-uuid>
+fantasy-projection-service=<staging-projection-uuid>
 fantasy-yahoo-service=<staging-yahoo-uuid>
 ```
 

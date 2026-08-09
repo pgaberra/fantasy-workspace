@@ -1,0 +1,4 @@
+# The forced-command scripts are installed on the Linux prod server. A CRLF working copy on
+# Windows would produce "bad interpreter: /usr/bin/env bash^M" when copied straight across,
+# so keep them LF everywhere.
+*.sh text eol=lf
