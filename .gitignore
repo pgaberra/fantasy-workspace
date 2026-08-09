@@ -1,0 +1,17 @@
+# De sex tjänste-repona — egna GitHub-repon, klonas av bootstrap.ps1
+fantasy-web/
+fantasy-bff/
+fantasy-db-service/
+fantasy-yahoo-service/
+fantasy-espn-service/
+fantasy-projection-service/
+
+# Arkiverade tjänster (retirerade när all spelardata kom från Yahoo)
+fantasy-nhl-service/
+fantasy-player-service/
+
+# Lokalt skräp
+node_modules/
+_wt-expand-default/
+_remote-control/
+goalie.json

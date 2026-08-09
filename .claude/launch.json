@@ -1,0 +1,49 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "fantasy-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "cwd": "fantasy-web",
+      "port": 4200
+    },
+    {
+      "name": "fantasy-web-staging",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start:staging"],
+      "cwd": "fantasy-web",
+      "port": 4200
+    },
+    {
+      "name": "fantasy-bff",
+      "runtimeExecutable": "./gradlew",
+      "runtimeArgs": ["bootRun"],
+      "cwd": "fantasy-bff",
+      "port": 8080,
+      "env": {
+        "SPRING_PROFILES_ACTIVE": "local"
+      }
+    },
+    {
+      "name": "fantasy-db-service",
+      "runtimeExecutable": "./gradlew",
+      "runtimeArgs": ["bootRun"],
+      "cwd": "fantasy-db-service",
+      "port": 8086,
+      "env": {
+        "SPRING_PROFILES_ACTIVE": "local"
+      }
+    },
+    {
+      "name": "fantasy-yahoo-service",
+      "runtimeExecutable": "./gradlew",
+      "runtimeArgs": ["bootRun"],
+      "cwd": "fantasy-yahoo-service",
+      "port": 8088,
+      "env": {
+        "SPRING_PROFILES_ACTIVE": "local"
+      }
+    }
+  ]
+}
