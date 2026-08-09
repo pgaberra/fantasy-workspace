@@ -31,7 +31,9 @@ fi
 UUID="$(grep -E "^${REPO}=" /root/staging_app_uuids.txt 2>/dev/null | head -1 | cut -d= -f2 || true)"
 if [ -z "$UUID" ]; then echo "refused: no staging UUID mapped for '$REPO'" >&2; exit 1; fi
 
-TOKEN="$(cat /root/.coolify_token)"
+# tr -d, not cat: a token pasted from Windows carries a CR, which makes the Authorization
+# header end in \r and nginx answer 400 before Coolify ever sees the request.
+TOKEN="$(tr -d '\r\n' < /root/.coolify_token)"
 BASE="https://coolify.slapstat.com/api/v1"
 
 # Update the value of the (pre-created) APP_VERSION env on the staging app.

@@ -14,7 +14,9 @@
 # Requires: /root/.coolify_token, /root/prod_app_uuids.txt, jq.
 set -uo pipefail
 
-TOKEN="$(cat /root/.coolify_token)"
+# tr -d, not cat: a token pasted from Windows carries a CR, which makes the Authorization
+# header end in \r and nginx answer 400 before Coolify ever sees the request.
+TOKEN="$(tr -d '\r\n' < /root/.coolify_token)"
 BASE="http://localhost:8000/api/v1"
 PROBLEMS=0
 

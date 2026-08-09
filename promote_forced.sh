@@ -43,7 +43,9 @@ esac
 UUID="$(awk -v r="$REPO" '$1==r{print $2}' /root/prod_app_uuids.txt 2>/dev/null || true)"
 [ -n "${UUID:-}" ] || reject "no prod uuid for $REPO"
 
-TOKEN="$(cat /root/.coolify_token)"
+# tr -d, not cat: a token pasted from Windows carries a CR, which makes the Authorization
+# header end in \r and nginx answer 400 before Coolify ever sees the request.
+TOKEN="$(tr -d '\r\n' < /root/.coolify_token)"
 BASE="http://localhost:8000/api/v1"   # Coolify runs on this host; skip Traefik and the IP gate.
 api() { curl -fsS -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"; }
 
