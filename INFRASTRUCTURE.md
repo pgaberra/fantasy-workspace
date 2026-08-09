@@ -251,17 +251,21 @@ All inter-service HTTP uses **generated typed clients** from each service's Open
   trusted services, not per-user auth).
 - **User auth:** the BFF issues JWTs (HS256); Google sign-in verifies Google ID tokens; Yahoo
   is a separate per-user OAuth handled by yahoo-service.
-- **Dev-phase access gate (pre-launch):** while the app isn't public, **HTTPS (:443) on both
-  servers is locked to the owner's IP** via host iptables on Docker's `DOCKER-USER` chain
-  (script `/root/ip-allowlist.sh`, re-applied on boot by the `ip-allowlist.service` systemd
-  unit). **Port 80 stays open** so http→https redirects and Let's Encrypt renewal keep working;
-  **SSH is untouched.**
-  - Change the allowed IP: `ALLOW_IP=<new-ip> /root/ip-allowlist.sh` on both servers.
-  - **Go public** (at prod launch): `FLUSH=1 /root/ip-allowlist.sh` + `systemctl disable
-    ip-allowlist.service` on the prod server (leave staging locked).
-  - **Gotcha:** the gate would otherwise block GitHub's webhook servers (breaking Coolify
-    auto-deploy), so prod's `:443` also allows GitHub's hook IP ranges — that's how staging
-    still auto-deploys while the app is private.
+- **Access gate — production is PUBLIC, staging is not.** The dev-phase gate locked HTTPS
+  (:443) to the owner's IP via host iptables on Docker's `DOCKER-USER` chain (script
+  `/root/ip-allowlist.sh`, re-applied on boot by the `ip-allowlist.service` systemd unit).
+  **On prod it has been lifted**: `ip-allowlist.service` is disabled and no `DOCKER-USER` rule
+  covers :443, so anyone on the internet can reach `slapstat.com`. **Staging is still locked**
+  to the owner's IP — which is why the nightly Playwright suite (`e2e.yml`, run from GitHub's
+  runners against `staging.slapstat.com`) fails with `ERR_CONNECTION_TIMED_OUT`.
+  - Verify the prod state: `systemctl is-enabled ip-allowlist.service` and
+    `iptables -L DOCKER-USER -n | grep 443`.
+  - Change staging's allowed IP: `ALLOW_IP=<new-ip> /root/ip-allowlist.sh` on the staging server.
+  - Re-lock prod if ever needed: `ALLOW_IP=<ip> /root/ip-allowlist.sh` + `systemctl enable
+    ip-allowlist.service`.
+  - **Gotcha, while a gate is on:** it would otherwise block GitHub's webhook servers, so the
+    script also allows GitHub's hook IP ranges on :443. **Port 80 stays open** regardless, so
+    http→https redirects and Let's Encrypt renewal keep working; **SSH is untouched.**
 
 ### Observability & alerting (Sentry)
 
@@ -316,16 +320,28 @@ the `POSTHOG_KEY` build arg (empty ⇒ analytics off, and `posthog-js` isn't eve
 
 ---
 
-## 10. Current status (2026-06-14)
+## 10. Current status (2026-08-09)
 
-- Both environments fully deployed and healthy (web, bff, db, nhl, yahoo on each).
-- Versions: backends at **`v0.2.x`** (bff `v0.2.1`, db/nhl/yahoo `v0.2.0`); web `v0.1.1`. Prod
-  is pinned to those; staging follows `master`.
+- **Production is public.** Real visitors are in the logs. Staging remains IP-locked.
+- Versions in production: web `v0.90.9`, bff `v0.35.1`, db-service `v0.16.3`,
+  yahoo-service `v0.9.0`, espn-service `v0.1.0`. Each prod app's `git_branch` is its release
+  tag; staging follows `master`.
+- **`fantasy-projection-service` is deliberately stopped in production.** Its Coolify app and
+  database exist and staging runs it, but who may read the model is undecided
+  ([fantasy-bff#105](https://github.com/pgaberra/fantasy-bff/issues/105)), so the service is
+  off and the BFF denies `/api/v1/projection-model/**` unless `PROJECTION_MODEL_ENABLED` says
+  otherwise.
+- **Three features ship dark**, present in production but switched off: subscriptions
+  (`PAYMENTS_ENABLED=false`), the ESPN league sync (`ESPN_LEAGUES_ENABLED` unset on the web),
+  and the projection model (above).
+- Yahoo's sync is off for the off-season: `YAHOO_SYNC_DISABLED` on the web,
+  `SYNC_YAHOO_DISABLED` on yahoo-service. The player read model therefore serves a frozen
+  snapshot, which is what the in-app off-season notice warns about.
 - **Error alerting: Sentry live on both envs** (ERROR logs → email; prod tagged with the
   version). See [`TROUBLESHOOTING.md`](./TROUBLESHOOTING.md).
-- Yahoo integration: backend live + OAuth verified end-to-end; the web "Connect Yahoo" UI is a
-  separate backlog item ([fantasy-web#65](https://github.com/pgaberra/fantasy-web/issues/65)).
-- Access: **private** — HTTPS locked to the owner's IP until prod launch.
+- **Health checks are off on every app**, so a promote still swaps containers without waiting
+  for the new one to answer — the images lack `curl`
+  ([fantasy-workspace#2](https://github.com/pgaberra/fantasy-workspace/issues/2)).
 - Backlog lives in the GitHub Project **"Fantasy Hockey"** (pgaberra #1).
 
 > Per-service specifics: see each repo's `DEPLOYMENT.md` and `CLAUDE.md`.
