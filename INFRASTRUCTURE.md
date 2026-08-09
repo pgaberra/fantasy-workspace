@@ -229,7 +229,22 @@ All inter-service HTTP uses **generated typed clients** from each service's Open
   from files on the servers.
 - **What's secret:** DB passwords, `JWT_SECRET`, the `*_INTERNAL_API_KEY` shared keys (BFF ↔
   each backend), `YAHOO_CLIENT_SECRET`, `YAHOO_STATE_SECRET`, `TOKEN_ENCRYPTION_KEY`.
-- **Per-environment isolation:** staging and prod use **independent** secrets — nothing shared.
+- **Per-environment isolation — the app's own secrets, not the third-party ones.** Everything
+  we generate is independent per environment: `JWT_SECRET`, `DB_PASSWORD`, every
+  `*_INTERNAL_API_KEY`, `TOKEN_ENCRYPTION_KEY`, `YAHOO_STATE_SECRET`. Verified 2026-08-09.
+  **Four values are deliberately shared** between staging and prod, because each is one
+  registration at a third party rather than something we mint:
+  - `SENTRY_DSN` — one Sentry project (`java-spring-boot`), with `SENTRY_ENVIRONMENT`
+    separating the two. Note that roughly half the events in it come from staging.
+  - `GOOGLE_CLIENT_SECRET` / `GOOGLE_CLIENT_ID` — one OAuth client, carrying both origins and
+    both `/auth/google/callback` redirect URIs.
+  - `FACEBOOK_APP_SECRET` / `FACEBOOK_APP_ID` — one Meta app.
+  - `YAHOO_CLIENT_SECRET` / `YAHOO_CLIENT_ID` — one Yahoo app, with both
+    `yahoo.slapstat.com` and `yahoo.staging.slapstat.com` registered as callbacks.
+
+  The consequence worth naming: a leak in staging of any of those four is a **production**
+  credential leak, and staging is where we experiment. Whether to split them is tracked in
+  [fantasy-workspace#1](https://github.com/pgaberra/fantasy-workspace/issues/1).
 - **Where they live on the servers (prod):**
   - `/root/.coolify_token` — Coolify API token.
   - `/root/.slapstat_secrets` — prod-generated keys (internal API keys, JWT, DB + Yahoo).
