@@ -27,8 +27,10 @@ Click through to the **issue in Sentry**. That's the main surface. It tells you:
 
 The message + stack trace usually tells you which of these it is:
 
-- **Transient blip** — e.g. a `ResourceAccessException` / 502 right when a service restarted
-  during a deploy. One-off, self-healed. Usually nothing to do; watch for recurrence.
+- **Transient blip** — e.g. a `ResourceAccessException` against a service that was restarting.
+  One-off, self-healed. Since health checks were enabled (August 2026) a deploy should no
+  longer cause these, so one that lines up with a deploy is worth a second look rather than a
+  shrug: compare the timestamp against the container's start in that app's log.
 - **Downstream outage** — `Downstream service call failed` against e.g. `db-service:8086`.
   A backend service was unreachable. Check that service's health/logs.
 - **Code bug** — an unexpected exception (NullPointer, parsing, etc.) in a controller/service.
@@ -66,16 +68,21 @@ deploy; the self-service steps are below):
 
 1. **Reproduce/fix** in the relevant repo.
 2. **Branch → PR → CI → squash-merge to `master`.**
-3. On merge: a new SemVer tag is auto-created, and **staging auto-deploys** → verify the fix
-   on `staging.slapstat.com` / `api.staging.slapstat.com`.
-4. **Promote the new version to prod** — manual, deliberate:
-   - the agent runs `/root/promote_prod.sh <prod-app-uuid> <commit-sha> <vX.Y.Z>` (UUIDs in
-     `/root/prod_app_uuids.txt`), which pins the commit, sets `SENTRY_RELEASE`, and deploys.
-   - resolve the tag's commit with `gh api repos/pgaberra/<repo>/git/ref/tags/<vX.Y.Z>`.
+3. On merge: a new SemVer tag is created along with a **draft** GitHub Release, and staging
+   deploys → verify the fix on `staging.slapstat.com` / `api.staging.slapstat.com`.
+4. **Promote the new version to prod** by **publishing that draft release**. That is the whole
+   step: `promote-to-prod.yml` runs on `release: published`, moves the app's `git_branch` to
+   the tag, stamps `APP_VERSION` + `SENTRY_RELEASE`, deploys, and then greps the build log for
+   the expected commit — so it fails loudly rather than reporting a promotion that shipped
+   something else. Rollback is the same workflow via `workflow_dispatch` with an older tag.
 5. **Mark the issue Resolved** in Sentry. If it recurs (regression), Sentry reopens it.
 
-> A brief 502 right after a prod promote is just the new container booting (Traefik 502s
-> until the app's healthcheck passes, ~5s) — not a real error.
+> **A 502 during a prod promote is now a signal, not noise.** Every production app has a
+> health check (`/actuator/health`, `/` for the web), so Coolify keeps the old container
+> serving until the new one answers. If users see 502s during a deploy, something is wrong —
+> check whether the health check got switched off, or whether the image lost `curl`, which the
+> probe runs inside the container. Before August 2026 the checks were disabled and a brief 502
+> per promote genuinely was expected; that is no longer the case.
 
 ---
 
