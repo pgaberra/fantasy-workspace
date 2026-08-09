@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Guard against production silently following master.
+# Guard against production silently following a moving branch.
 #
-# Coolify builds  $commit ?: ($application->git_commit_sha ?: 'HEAD'), so a prod app whose
-# git_commit_sha is empty or 'HEAD' deploys the branch tip on the next redeploy — no promote,
-# no release, no warning. Auto-deploy does the same thing on every merge. Both are invisible
-# in the UI unless you go looking, so this checks for them.
+# Measured on this Coolify instance (2026-08-09): the "Commit SHA" field (git_commit_sha) is
+# INERT — a deploy builds the tip of git_branch regardless of it. So the only thing keeping
+# production still is git_branch pointing at an immutable release TAG. An app whose git_branch
+# is "master" will rebuild whatever master has become the next time anyone redeploys it, with
+# no release, no promotion and no warning. That is how prod-web ended up running master in
+# August 2026 while its "pin" still read v0.83.0.
 #
-# Run on the PROD server (it holds /root/.coolify_token). Exits non-zero on any violation, so
-# it works as a cron job:
-#   0 7 * * * /root/check_prod_pins.sh || mail -s "SlapStat: prod pin drift" you@example.com
+# Run on the PROD server (it holds /root/.coolify_token). Exits non-zero on any violation:
+#   0 7 * * * /root/check_prod_pins.sh || mail -s "SlapStat: prod is not on a release" you@example.com
 #
 # Requires: /root/.coolify_token, /root/prod_app_uuids.txt, jq.
 set -uo pipefail
@@ -22,42 +23,34 @@ while read -r REPO UUID _; do
   [ -z "${REPO:-}" ] && continue
   case "$REPO" in \#*) continue ;; esac
 
-  APP="$(curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/applications/$UUID" || true)"
-  if [ -z "$APP" ] || [ "$(jq -r '.uuid // ""' <<< "$APP")" = "" ]; then
-    echo "ERROR  $REPO: no such application ($UUID) — stale entry in prod_app_uuids.txt?"
+  APP="$(curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/applications/$UUID" 2>/dev/null || true)"
+  if [ -z "$(jq -r '.uuid // ""' <<< "${APP:-{\}}" 2>/dev/null)" ]; then
+    echo "ERROR       $REPO — no such application ($UUID); stale entry in prod_app_uuids.txt?"
     PROBLEMS=$((PROBLEMS + 1))
     continue
   fi
 
-  SHA="$(jq -r '.git_commit_sha // ""' <<< "$APP")"
   BRANCH="$(jq -r '.git_branch // ""' <<< "$APP")"
-
-  DEPLOYMENTS="$(curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/deployments/applications/$UUID" || echo '{}')"
-  LAST_COMMIT="$(jq -r '.deployments[0].commit // ""' <<< "$DEPLOYMENTS")"
+  DEPLOYMENTS="$(curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/deployments/applications/$UUID" 2>/dev/null || echo '{}')"
   WEBHOOKED="$(jq -r '[.deployments[]? | select(.is_webhook == true)] | length' <<< "$DEPLOYMENTS")"
+  LAST_AT="$(jq -r '.deployments[0].created_at // "never"' <<< "$DEPLOYMENTS")"
 
   CLEAN=1
-  if [ -z "$SHA" ] || [ "$SHA" = "HEAD" ]; then
-    echo "UNPINNED  $REPO (branch '$BRANCH') — next deploy would build the tip of '$BRANCH'"
+  if [[ ! "$BRANCH" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "UNRELEASED  $REPO — git_branch is '$BRANCH', not a release tag; a redeploy would build its tip"
     PROBLEMS=$((PROBLEMS + 1)); CLEAN=0
   fi
-  # The application API exposes no auto-deploy flag, so look for its footprint instead.
   if [ "${WEBHOOKED:-0}" -gt 0 ]; then
     echo "AUTODEPLOY  $REPO — $WEBHOOKED webhook-triggered deployment(s); a push can reach production"
     PROBLEMS=$((PROBLEMS + 1)); CLEAN=0
   fi
-  # What is running must be what was promoted. prod-web drifted exactly here in Aug 2026.
-  if [ -n "$SHA" ] && [ -n "$LAST_COMMIT" ] && [ "$SHA" != "$LAST_COMMIT" ]; then
-    echo "DRIFT  $REPO — pinned ${SHA:0:7} but last deployed ${LAST_COMMIT:0:7}"
-    PROBLEMS=$((PROBLEMS + 1)); CLEAN=0
-  fi
-  [ "$CLEAN" = "1" ] && echo "ok  $REPO  branch=$BRANCH  sha=${SHA:0:7}"
+  [ "$CLEAN" = "1" ] && echo "ok          $REPO  $BRANCH  (last deployed $LAST_AT)"
 done < /root/prod_app_uuids.txt
 
 if [ "$PROBLEMS" -gt 0 ]; then
   echo
-  echo "$PROBLEMS problem(s) found — production can move without a release."
+  echo "$PROBLEMS problem(s) — production can move without anyone publishing a release."
   exit 1
 fi
 echo
-echo "All production apps are pinned and will not follow a branch."
+echo "Every production app is on a release tag and cannot follow a branch."

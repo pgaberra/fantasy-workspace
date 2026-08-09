@@ -1,122 +1,120 @@
 #!/usr/bin/env bash
-# Restricted forced-command for the "prod promote" SSH key (sibling of
-# set_staging_version_forced.sh). Install on the PROD server as /root/promote_forced.sh,
-# chmod 700, with the matching public key pinned in /root/.ssh/authorized_keys:
+# Restricted forced-command for the "prod promote" SSH key. Install on the PROD server as
+# /root/promote_forced.sh, chmod 700, with the matching public key pinned in
+# /root/.ssh/authorized_keys:
 #
 #   command="/root/promote_forced.sh",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty ssh-ed25519 AAAA... prod-promote
 #
 # Invoked by each repo's promote-to-prod workflow as:  ssh root@prod "<repo> <sha> <vX.Y.Z>"
 #
-# WHY THE VERIFICATION STEPS EXIST
-# Coolify picks the commit to build as:  $commit ?: ($application->git_commit_sha ?: 'HEAD')
-# and NEITHER the Redeploy button NOR the deploy API passes a commit. So an application whose
-# git_commit_sha is empty or 'HEAD' silently builds the branch tip — that is how production
-# drifted onto master in Aug 2026 (prod-web ran master while its pin still read v0.83.0).
-# This script therefore refuses to deploy unless the pin is verifiably in place, and fails
-# loudly if the commit that actually landed is not the one asked for.
+# HOW PRODUCTION IS ACTUALLY PINNED — measured, not assumed (2026-08-09)
+# Coolify's "Commit SHA" field (git_commit_sha) is INERT on this instance. Setting it to an
+# older commit and deploying builds the branch tip anyway; verified on staging-espn-service:
+# pinned 2b4affe, Coolify built 06bc9a0 and logged "Importing …:master (commit sha 06bc9a0)".
+# What IS honoured is git_branch. Put a TAG there and Coolify clones -b <tag>, lands in
+# detached HEAD on the tagged commit and builds exactly that; same service, git_branch=v0.0.2
+# built 2b4affe with master untouched.
+#
+# So a promotion moves git_branch to the release tag — an immutable ref. Any later deploy from
+# any path (the Redeploy button, the API, a webhook) rebuilds that same tag rather than
+# whatever master has become. That is the property production was missing when prod-web
+# silently ended up running master in August 2026.
 #
 # Requires (one-time):
 #   /root/.coolify_token        — Coolify API token.
-#   /root/prod_app_uuids.txt    — "repo=uuid" per line, e.g. fantasy-web=abc123.
-#   jq                          — apt-get install -y jq.
+#   /root/prod_app_uuids.txt    — whitespace-separated "repo  uuid" per line.
+#   jq
 set -euo pipefail
 
-read -r REPO SHA VERSION _ <<< "${SSH_ORIGINAL_COMMAND:-}"
+read -r REPO SHA VERSION REST <<< "${SSH_ORIGINAL_COMMAND:-}"
 
+LOG=/root/promote_prod.log
+log() { echo "[$(date -u +%FT%TZ)] $*" >> "$LOG"; }
+reject() { echo "promote: $1" >&2; log "REJECTED: $1 (raw='${SSH_ORIGINAL_COMMAND:-}')"; exit 2; }
+
+[ -z "${REST:-}" ] || reject "too many args"
 case "$REPO" in
   fantasy-web|fantasy-bff|fantasy-db-service|fantasy-espn-service|fantasy-projection-service|fantasy-yahoo-service) ;;
-  *) echo "refused: unknown repo '$REPO'" >&2; exit 1 ;;
+  *) reject "unknown repo '${REPO:-}'" ;;
 esac
-if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
-  echo "refused: '$SHA' is not a full 40-char commit sha" >&2; exit 1
-fi
-if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "refused: bad version '$VERSION'" >&2; exit 1
-fi
+[[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || reject "bad commit sha"
+[[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || reject "bad version"
 
-# prod_app_uuids.txt is whitespace-separated ("repo  uuid"), unlike the staging map's "repo=uuid".
 UUID="$(awk -v r="$REPO" '$1==r{print $2}' /root/prod_app_uuids.txt 2>/dev/null || true)"
-if [ -z "$UUID" ]; then echo "refused: no prod UUID mapped for '$REPO'" >&2; exit 1; fi
+[ -n "${UUID:-}" ] || reject "no prod uuid for $REPO"
 
 TOKEN="$(cat /root/.coolify_token)"
-# Coolify runs on this host; go straight to it rather than out through Traefik and the IP gate.
-BASE="http://localhost:8000/api/v1"
+BASE="http://localhost:8000/api/v1"   # Coolify runs on this host; skip Traefik and the IP gate.
+api() { curl -fsS -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"; }
 
-api() {
-  curl -fsS -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"
-}
-
+log "PROMOTE $REPO -> $VERSION ($SHA) uuid=$UUID"
 echo "promoting $REPO -> $VERSION ($SHA) on app $UUID"
 
-# 1. Pin the app: branch to the immutable tag, commit to the exact sha. The branch is
-#    belt-and-braces — even a deploy that ignored the sha would resolve the tag, not master.
-api -X PATCH "$BASE/applications/$UUID" \
-  -d "$(jq -nc --arg b "$VERSION" --arg s "$SHA" '{git_branch:$b, git_commit_sha:$s}')" >/dev/null
-
-# 2. Read it back and refuse to deploy unless the pin actually stuck.
-APP="$(api "$BASE/applications/$UUID")"
-GOT_SHA="$(jq -r '.git_commit_sha // ""' <<< "$APP")"
-GOT_BRANCH="$(jq -r '.git_branch // ""' <<< "$APP")"
-if [ "$GOT_SHA" != "$SHA" ] || [ "$GOT_BRANCH" != "$VERSION" ]; then
-  echo "refused: pin did not stick (branch='$GOT_BRANCH' sha='$GOT_SHA') — NOT deploying" >&2
-  exit 1
-fi
-
-# 3. Refuse to promote an app that Coolify has been deploying on its own. The application API
-#    does not expose the auto-deploy flag at all, so this looks at the evidence instead: a
-#    recent webhook-triggered deployment means a push reached production without a release.
-if curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/deployments/applications/$UUID" \
+# Refuse to promote an app Coolify also deploys on its own. The application API exposes no
+# auto-deploy flag, so look for its footprint: a webhook-triggered deployment means a push
+# reached production without a release.
+if api "$BASE/deployments/applications/$UUID" \
      | jq -e '[.deployments[]? | select(.is_webhook == true)] | length > 0' >/dev/null; then
-  echo "refused: $REPO has webhook-triggered deployments in production — turn auto-deploy off first" >&2
-  exit 1
+  reject "$REPO has webhook-triggered deployments in production — turn auto-deploy off first"
 fi
 
-# 4. Stamp the version. APP_VERSION must already exist on the app (Coolify's env PATCH cannot
-#    set the build-time flag, and fantasy-web needs it at build time to bake it into the bundle).
+# 1. Move the app onto the release tag. git_commit_sha stays "HEAD" deliberately: it is the
+#    exact configuration that was measured to work, and a value there would only be misleading.
+api -X PATCH "$BASE/applications/$UUID" \
+  -d "$(jq -nc --arg b "$VERSION" '{git_branch:$b, git_commit_sha:"HEAD"}')" >/dev/null
+
+# 2. Verify the move stuck BEFORE deploying anything.
+GOT_BRANCH="$(api "$BASE/applications/$UUID" | jq -r '.git_branch // ""')"
+if [ "$GOT_BRANCH" != "$VERSION" ]; then
+  reject "branch did not move to $VERSION (still '$GOT_BRANCH') — NOT deploying"
+fi
+
+# 3. Stamp the version. PATCH updates the existing variable in place; do NOT delete-and-recreate
+#    (the old set_env.py did, which silently dropped fantasy-web's build-time flag on
+#    APP_VERSION and left the bundle reporting a stale version for weeks).
 set_env() {
-  local key="$1" value="$2"
   api -X PATCH "$BASE/applications/$UUID/envs" \
-    -d "$(jq -nc --arg k "$key" --arg v "$value" '{key:$k, value:$v}')" >/dev/null \
-    || { echo "failed: could not set $key — is it pre-created on the app?" >&2; exit 1; }
+    -d "$(jq -nc --arg k "$1" --arg v "$2" '{key:$k, value:$v}')" >/dev/null \
+    || reject "could not set $1 — is it pre-created on the app? (fantasy-web needs APP_VERSION as BUILD-TIME)"
 }
 set_env APP_VERSION "$VERSION"
 set_env SENTRY_RELEASE "$VERSION"
 
-# 5. Deploy.
-DEPLOY="$(api "$BASE/deploy?uuid=$UUID")"
-DEPLOYMENT_UUID="$(jq -r '.deployments[0].deployment_uuid // ""' <<< "$DEPLOY")"
-if [ -z "$DEPLOYMENT_UUID" ]; then
-  echo "failed: deploy did not return a deployment uuid: $DEPLOY" >&2; exit 1
-fi
+# 4. Deploy.
+DEPLOYMENT_UUID="$(api -X POST "$BASE/deploy?uuid=$UUID&force=false" \
+  | jq -r '.deployments[0].deployment_uuid // ""')"
+[ -n "$DEPLOYMENT_UUID" ] || reject "deploy did not return a deployment uuid"
 echo "deployment $DEPLOYMENT_UUID queued"
 
-# 6. Wait for it, then assert that what landed is what we asked for.
+# 5. Wait for it.
 STATUS=""
-DEPLOYMENT=""
 for _ in $(seq 1 180); do
-  DEPLOYMENT="$(api "$BASE/deployments/$DEPLOYMENT_UUID" || true)"
-  STATUS="$(jq -r '.status // ""' <<< "$DEPLOYMENT")"
+  STATUS="$(api "$BASE/deployments/$DEPLOYMENT_UUID" | jq -r '.status // ""')"
   case "$STATUS" in
     finished) break ;;
-    failed|cancelled-by-user) echo "failed: deployment ended as '$STATUS'" >&2; exit 1 ;;
+    failed|cancelled-by-user) log "FAILED $REPO $VERSION: deployment $STATUS"; echo "failed: deployment ended as '$STATUS'" >&2; exit 1 ;;
   esac
   sleep 5
 done
 if [ "$STATUS" != "finished" ]; then
+  log "FAILED $REPO $VERSION: deployment timed out (last '$STATUS')"
   echo "failed: deployment did not finish within 15 minutes (last status '$STATUS')" >&2; exit 1
 fi
 
-DEPLOYED_COMMIT="$(jq -r '.commit // ""' <<< "$DEPLOYMENT")"
-if [ -n "$DEPLOYED_COMMIT" ] && [ "$DEPLOYED_COMMIT" != "$SHA" ]; then
-  echo "FAILED: production deployed $DEPLOYED_COMMIT but $VERSION is $SHA" >&2
-  echo "        prod is NOT on the version you promoted — investigate before shipping again" >&2
+# 6. Assert what was BUILT. The deployment record's .commit field is not trustworthy — it
+#    echoes git_commit_sha, so it reads "HEAD" here — but the build log contains the commit
+#    git actually checked out. That is the only honest source.
+BUILD_LOG="$(api "$BASE/deployments/$DEPLOYMENT_UUID" | jq -r '.logs' | jq -r '.[]?.output // empty')"
+if ! grep -qF "$SHA" <<< "$BUILD_LOG"; then
+  log "FAILED $REPO $VERSION: build log does not mention $SHA"
+  echo "FAILED: production did not build $SHA — it is NOT on $VERSION. Investigate before shipping again." >&2
+  echo "$BUILD_LOG" | grep -iE 'importing|starting deployment' | head -3 >&2
   exit 1
 fi
 
-# 7. The pin must still read the promoted commit after the deploy.
-GOT_SHA="$(api "$BASE/applications/$UUID" | jq -r '.git_commit_sha // ""')"
-if [ "$GOT_SHA" != "$SHA" ]; then
-  echo "FAILED: pin drifted during deploy (now '$GOT_SHA', expected $SHA)" >&2; exit 1
-fi
+# 7. The branch must still be the tag afterwards.
+GOT_BRANCH="$(api "$BASE/applications/$UUID" | jq -r '.git_branch // ""')"
+[ "$GOT_BRANCH" = "$VERSION" ] || reject "branch drifted during deploy (now '$GOT_BRANCH')"
 
-echo "ok: $REPO production -> $VERSION ($SHA), verified"
+log "OK $REPO -> $VERSION ($SHA) verified"
+echo "ok: $REPO production -> $VERSION ($SHA), verified against the build log"

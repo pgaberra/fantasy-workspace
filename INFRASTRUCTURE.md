@@ -183,17 +183,28 @@ nothing else moves production. `promote-to-prod.yml` runs on `release: published
 accepts a manual `workflow_dispatch` with a tag, which is how you roll back to an older one).
 
 It resolves the tag to its commit and calls `/root/promote_forced.sh <repo> <sha> <version>`
-over a restricted SSH key. That script pins `git_branch` (to the tag) **and**
-`git_commit_sha`, verifies the pin stuck *before* deploying, deploys, and then verifies that
-the commit which actually landed is the one asked for — failing loudly otherwise. Prod app
+over a restricted SSH key. That script moves the app's **`git_branch` onto the release tag**,
+verifies the move stuck *before* deploying, stamps `APP_VERSION` + `SENTRY_RELEASE`, deploys,
+and then greps the **build log** for the expected commit — failing loudly otherwise. Prod app
 UUIDs live in `/root/prod_app_uuids.txt`.
 
-> **Why the verification exists.** Coolify chooses the commit to build as
-> `$commit ?: ($application->git_commit_sha ?: 'HEAD')`, and neither the Redeploy button nor
-> the deploy API passes a commit. An app whose pin is empty or `HEAD` therefore builds the
-> **branch tip** on any redeploy — which is how production silently ended up running `master`
-> in August 2026. `/root/check_prod_pins.sh` (cron) fails if any prod app is unpinned or has
-> auto-deploy on.
+> **What actually pins production — measured on this instance, 2026-08-09.** Coolify's
+> **"Commit SHA" field (`git_commit_sha`) is inert**: staging-espn-service was set to
+> `2b4affe` and deployed, and Coolify built `06bc9a0` (the master tip) anyway. What *is*
+> honoured is **`git_branch`**. Put a tag there and Coolify clones `-b <tag>`, lands in
+> detached HEAD and builds exactly that commit — the same service on `git_branch=v0.0.2`
+> built `2b4affe` with master untouched.
+>
+> So an app on `git_branch: master` rebuilds **whatever master has become** the next time
+> anyone redeploys it — no release, no promotion, no warning. That is how production ended up
+> running `master` in August 2026 while its "pin" still read `v0.83.0`, and why every promotion
+> moves the branch to an immutable tag instead. `/root/check_prod_pins.sh` (cron) fails if any
+> prod app is on a branch rather than a `vX.Y.Z` tag, or shows webhook-triggered deployments.
+>
+> Two related traps, both fixed: the old `/root/promote_prod.sh` pinned only the inert commit
+> field (now `.deprecated`), and `/root/set_env.py` **deleted and recreated** each variable,
+> which silently dropped `fantasy-web`'s **build-time** flag on `APP_VERSION` — leaving the
+> shipped bundle reporting a stale version. Env values are now updated in place with `PATCH`.
 
 **Typical release flow:** merge PRs → staging updates + a draft release appears (e.g.
 `v0.2.0`) → test on staging → publish that release → prod is promoted and verified. To roll
