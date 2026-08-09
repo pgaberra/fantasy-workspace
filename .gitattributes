@@ -1,0 +1,7 @@
+# Scripten körs som forced-commands på Linux-servrarna (staging/prod).
+# CRLF skulle bryta shebang-raden — pinna dem till LF oavsett core.autocrlf.
+*.sh text eol=lf
+
+# Brand-assets: ingen radslutskonvertering.
+*.png binary
+*.ico binary
