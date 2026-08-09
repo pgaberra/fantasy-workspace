@@ -69,9 +69,11 @@ if [ "$GOT_BRANCH" != "$VERSION" ]; then
   reject "branch did not move to $VERSION (still '$GOT_BRANCH') — NOT deploying"
 fi
 
-# 3. Stamp the version. PATCH updates the existing variable in place; do NOT delete-and-recreate
-#    (the old set_env.py did, which silently dropped fantasy-web's build-time flag on
-#    APP_VERSION and left the bundle reporting a stale version for weeks).
+# 3. Stamp the version. PATCH updates the existing variable in place and preserves its flags
+#    (measured: is_buildtime survives). The old set_env.py deleted and recreated instead, which
+#    discards whatever flags a variable carried and relies on Coolify's defaults — fine by luck
+#    today, silent breakage the day a default changes. fantasy-web in particular needs
+#    APP_VERSION at BUILD time: it is baked into the Angular bundle.
 set_env() {
   api -X PATCH "$BASE/applications/$UUID/envs" \
     -d "$(jq -nc --arg k "$1" --arg v "$2" '{key:$k, value:$v}')" >/dev/null \

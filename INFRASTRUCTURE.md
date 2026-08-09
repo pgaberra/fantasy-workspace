@@ -201,10 +201,16 @@ UUIDs live in `/root/prod_app_uuids.txt`.
 > moves the branch to an immutable tag instead. `/root/check_prod_pins.sh` (cron) fails if any
 > prod app is on a branch rather than a `vX.Y.Z` tag, or shows webhook-triggered deployments.
 >
-> Two related traps, both fixed: the old `/root/promote_prod.sh` pinned only the inert commit
-> field (now `.deprecated`), and `/root/set_env.py` **deleted and recreated** each variable,
-> which silently dropped `fantasy-web`'s **build-time** flag on `APP_VERSION` — leaving the
-> shipped bundle reporting a stale version. Env values are now updated in place with `PATCH`.
+> The old `/root/promote_prod.sh` pinned only the inert commit field and is now `.deprecated`.
+> Its August run is what shipped the wrong code: it stamped `APP_VERSION=v0.83.0`, pinned
+> `bf1c0c4`, and deployed — and Coolify built `master` instead. That is why the bundle reported
+> `v0.83.0` while running `v0.90.7` code: **the version label was the release someone intended
+> to ship, and the code was whatever master happened to be.** A promotion that silently ships
+> something else is exactly what the build-log check now catches.
+>
+> Env values are updated in place with `PATCH` (verified to preserve `is_buildtime`) rather
+> than `set_env.py`'s delete-and-recreate, which discards whatever flags a variable carried and
+> falls back to Coolify's defaults.
 
 **Typical release flow:** merge PRs → staging updates + a draft release appears (e.g.
 `v0.2.0`) → test on staging → publish that release → prod is promoted and verified. To roll
