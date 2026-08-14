@@ -69,6 +69,41 @@ description so the merge closes the issue.
 - Branch → push → PR → checks pass → **squash merge** to `master`.
 - `@claude` mentions on issues/PRs trigger the Claude workflow in each repo.
 
+### Working in parallel — one worktree per agent
+
+**Assume another agent is working in these repos right now.** Several sessions run against
+the same clones, so the checkout you find is *not* yours: it may sit on someone else's
+feature branch, with their half-finished edits in the working tree.
+
+Before you change anything, move into **your own git worktree** — never work directly in the
+shared checkout:
+
+```
+git -C <repo> fetch origin
+git -C <repo> worktree add <path-outside-the-repo>/<short-name> -b <your-branch> origin/master
+```
+
+Put the worktree outside the repo (the session scratchpad is a good home) so it doesn't end
+up in the other agent's file watcher or build output. Remove it when the PR is merged:
+`git worktree remove <path>`.
+
+Cut the branch from `origin/master` **explicitly**, as above. A bare `git checkout -b` cuts
+from whatever HEAD happens to be, and if that's another agent's in-flight branch your PR
+silently carries their commits into `master` alongside yours.
+
+Three more rules that follow from the same problem:
+
+- **Never `checkout`, `switch`, `stash`, `pull` or `reset` in the shared checkout.** It yanks
+  the floor out from under whoever is editing there.
+- **Stage explicit paths** — `git add <the files you changed>`, never `git add -A` or `-u`.
+  Modified files you don't recognise are someone else's work; leave them alone.
+- **Read the PR before merging** (`gh pr view <n> --json commits,files`). If it contains a
+  commit or a file you didn't write, the branch was cut from the wrong base — fix that first.
+
+A fresh `fantasy-web` worktree needs `npm ci` and `npm run generate:api` before lint/test/build
+will run, since `node_modules` and the generated `src/app/api` are not in git. The Gradle
+services need nothing extra.
+
 ### Merging PRs
 
 GitHub squash merge uses the **PR title** as the commit message — the individual
