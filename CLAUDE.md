@@ -64,6 +64,19 @@ Cards are GitHub Issues across the four repos, grouped by Status **Todo / In Pro
 Done**. When starting a card, move it to *In Progress*; put `Closes #NN` in the PR
 description so the merge closes the issue.
 
+## Say what you find
+
+Building a feature or chasing a bug turns up things that weren't the task: a second bug
+beside the one being fixed, a number that can't be right, a rule that contradicts another,
+a decision in the code that looks like a mistake. **Tell Alexander about it, in the reply
+you're already writing** — plainly, in a line or two, with what you saw and what it would
+mean. His call, not yours.
+
+That holds whether or not it is worth acting on now, and whether or not it is in scope. A
+finding kept back because it "wasn't part of the ticket" is a finding nobody gets to weigh.
+Report it and carry on with the task at hand — don't quietly widen the change to cover it,
+and don't stop and wait for an answer unless the work genuinely can't continue without one.
+
 ## CI / workflow
 
 - Branch → push → PR → checks pass → **squash merge** to `master`.
