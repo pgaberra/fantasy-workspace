@@ -1,21 +1,30 @@
 #!/usr/bin/env bash
 # Downtime monitor: checks each local Coolify service/DB and raises a Sentry event on
-# up->down and down->up transitions. Sources SENTRY_DSN from a running backend container,
-# so no secret is stored here. Alerts only after FAIL_THRESHOLD consecutive failures, to
-# tolerate brief deploy windows. Conf rows: "name kind target port path" (kind = http|pg).
+# up->down and down->up transitions. Takes SENTRY_DSN from /root/.health-dsn if present,
+# otherwise from a running container. Alerts only after FAIL_THRESHOLD consecutive failures,
+# to tolerate brief deploy windows. Conf rows: "name kind target port path" (kind = http|pg).
 #
 # Installed on BOTH servers as /root/health-monitor.sh, run every two minutes by
-# health-monitor.timer. /root/.health-env names the environment in the Sentry event.
+# health-monitor.timer. /root/.health-env names the environment in the Sentry event, and
+# /root/.health-dsn pins which Sentry project it lands in — write the backend DSN there, or
+# a browser DSN on the web app will silently capture the backend's alerts.
 set -uo pipefail
 
 CONF=/root/health-monitor.conf
+DSN_FILE=/root/.health-dsn
 STATE_DIR=/root/.health-state
 ENV_NAME="$(cat /root/.health-env 2>/dev/null || echo unknown)"
 FAIL_THRESHOLD=2
 mkdir -p "$STATE_DIR"
 
+# An explicitly configured DSN wins over anything found on the host. Scavenging was fine while
+# only the Java services carried a SENTRY_DSN; the day the web app was given one of its own, this
+# started filing backend outage alerts into the frontend's Sentry project — where they are noise,
+# and where nobody watching the backends would look for them. Without the file it behaves as
+# before, so an unconfigured host keeps working.
 find_dsn() {
   local cid env
+  if [ -s "$DSN_FILE" ]; then tr -d '[:space:]' < "$DSN_FILE"; return 0; fi
   for cid in $(docker ps -q); do
     env=$(docker inspect "$cid" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep '^SENTRY_DSN=' | head -1)
     if [ -n "$env" ]; then echo "${env#SENTRY_DSN=}"; return 0; fi
