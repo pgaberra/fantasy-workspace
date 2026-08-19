@@ -122,9 +122,19 @@ services need nothing extra.
 GitHub squash merge uses the **PR title** as the commit message — the individual
 branch commits are ignored. Before merging:
 
-1. Ensure the PR title is a proper commit message (e.g. `feat: add X`, `fix: correct Y`).
+1. Check the PR isn't stale against `master`. PR Checks tests the PR branch merged
+   against whatever `master` was when the check last ran — not continuously — and (since
+   it was cut as a minutes-saving duplicate) it no longer re-runs after merge either. If
+   another PR has merged to `master` since this one's last green check, `git merge
+   origin/master` (or rebase) into the branch and let checks run again before merging —
+   otherwise the squash-merged result combines code that was never actually built or
+   tested together. `gh pr view <n> --json baseRefOid` plus `git log <that-sha>..origin/master`
+   tells you whether `master` has moved past what the PR's check ran against; no repos on
+   this account can enforce this with branch protection (private repos need GitHub Pro),
+   so it's on whoever merges to check.
+2. Ensure the PR title is a proper commit message (e.g. `feat: add X`, `fix: correct Y`).
    Rename it first with `gh pr edit <n> --title "..."` if needed.
-2. Merge with an explicit subject so the commit message is never left to chance:
+3. Merge with an explicit subject so the commit message is never left to chance:
    ```
    gh pr merge <n> --squash --delete-branch \
      --subject "feat: describe the change (#<n>)" \
