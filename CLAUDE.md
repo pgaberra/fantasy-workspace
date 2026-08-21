@@ -165,8 +165,3 @@ branch commits are ignored. Before merging:
    ```
 
 Never merge a PR titled "wip", "draft", or similar.
-
-## Commit messages
-
-No attribution trailers. `attribution.commit` and `attribution.pr` are set to `""` in
-`~/.claude/settings.json` — this is enforced at the tool level.
