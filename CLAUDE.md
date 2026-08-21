@@ -1,39 +1,39 @@
 # CLAUDE.md — fantasy (monorepo root)
 
-Four-service fantasy hockey application:
+Six-repo fantasy hockey application (SlapStat):
 
 | Repo | Role | Port |
 |---|---|---|
 | `fantasy-web` | Angular 21 frontend | 4200 |
 | `fantasy-bff` | Spring Boot 4 Backend-for-Frontend (auth, orchestration) | 8080 |
-| `fantasy-db-service` | Spring Boot 4 persistence service (users, Postgres) | 8086 |
-| `fantasy-yahoo-service` | Spring Boot 4 Yahoo integration (per-user OAuth, league settings, **and the cached player read model** — identity + Yahoo eligible positions + season stats, Postgres) | 8088 |
+| `fantasy-db-service` | Spring Boot 4 persistence (users, projections, shares — Postgres) | 8086 |
+| `fantasy-yahoo-service` | Spring Boot 4 Yahoo integration (per-user OAuth, league settings, **and the cached player read model** — identity + eligible positions + season stats, Postgres) | 8088 |
+| `fantasy-espn-service` | Spring Boot 4 ESPN integration (leagues via the user's cookies, plus the stats Yahoo does not report, Postgres) | 8090 |
+| `fantasy-projection-service` | Python/FastAPI projection model + NHL stat store (Postgres) | 8092 |
 
-The web talks only to the BFF. The BFF talks to db-service and yahoo-service. (The former
+The web talks only to the BFF; the BFF talks to the other four. (The former
 `fantasy-nhl-service` and `fantasy-player-service` were retired once all player data —
 stats, positions and identity — came from Yahoo, with the player read model + sync folded
-into yahoo-service.)
+into yahoo-service. Nothing in the monorepo talks to them.)
 Inter-service calls are authenticated with a shared `X-Internal-Api-Key` header — the one
 exception is yahoo-service's OAuth callback (`/api/v1/yahoo/oauth/callback`), which Yahoo's
 browser redirect hits directly and which is secured by a signed `state` parameter instead.
-Each repo has its own `CLAUDE.md`.
+Each repo has its own `CLAUDE.md` for its own detail; this file holds what is shared.
 
 ## Service communication
 
 All inter-service HTTP communication is **OpenAPI-first**:
 
-- Every service exposes its spec at `/v3/api-docs` (springdoc).
+- Every service exposes its spec (`/v3/api-docs` via springdoc; `/openapi.json` on
+  projection-service).
 - Consumers generate typed clients from the spec — never write hand-rolled HTTP clients.
-- `fantasy-web` → `fantasy-bff`: TypeScript client generated via `ng-openapi-gen`
-  (`npm run generate:api` in `fantasy-web`).
-- `fantasy-bff` → `fantasy-db-service`: Java model POJOs generated via
-  `openapi-generator` Gradle plugin (`./gradlew openApiGenerate` in `fantasy-bff`).
-  Committed spec lives at `fantasy-bff/specs/fantasy-db-service-openapi.yaml`.
-- `fantasy-bff` → `fantasy-yahoo-service`: Java model POJOs generated via the same plugin
-  (`./gradlew generateYahooClient` in `fantasy-bff`). Committed spec lives at
-  `fantasy-bff/specs/fantasy-yahoo-service-openapi.yaml`. yahoo-service owns both the Yahoo
-  OAuth integration and the cached player read model (skaters/goalies + a daily sync), so
-  the BFF reads all player data from it.
+- `fantasy-web` → `fantasy-bff`: TypeScript client via `ng-openapi-gen`
+  (`npm run generate:api`).
+- `fantasy-bff` → each downstream: Java model POJOs via the `openapi-generator` Gradle
+  plugin, one task per service (`openApiGenerate` for db, plus `generateYahooClient`,
+  `generateEspnClient`, `generateProjectionClient`).
+- The consumer commits a **verbatim pinned copy** of the producer's spec under `specs/`,
+  and CI fails if it drifts from the producer's `master`.
 
 When a service changes its API: update the spec → regenerate the client → fix any
 compile errors → open a PR. This ensures breaking changes are caught at compile time.
@@ -55,12 +55,32 @@ never risk leaking (or reusing) a real one.
 - Spring profiles for running a service: `local` (docker-compose Postgres) and `staging`
   (the deployed DB). Run with `SPRING_PROFILES_ACTIVE=<profile> DB_PASSWORD=… ./gradlew bootRun`.
 
+## Input validation
+
+**Every service validates its own inbound data independently** — never trust that an
+upstream caller (e.g. the BFF) validated correctly. Reject malformed input at the boundary
+with Bean Validation, and give **every user-supplied string a `@Size(max=…)`** so an
+oversized payload is rejected rather than processed or stored. The web mirrors those caps in
+its forms as a UX convenience, never as a security boundary.
+
+## Logging & error handling
+
+**Never silence an error.** Every service's `@RestControllerAdvice` has a catch-all
+`@ExceptionHandler(Exception.class)` that **logs the full stack trace** (`log.error`) and
+returns a consistent `ErrorDto` — an unmatched exception must never surface as an opaque 500
+with no server-side trace (a downstream failure was once undiagnosable because of exactly
+this). **5xx / genuine faults** log at `ERROR` with the exception, so the trace reaches the
+logs and Sentry; **4xx / expected client outcomes** (unauthorized, not-found, conflict,
+validation) do **not** — they are normal and would just be noise. **Async / background work**
+(scheduled syncs, CLI runs) never reaches the advice and must `try/catch` at its own
+boundary. Each repo's `CLAUDE.md` adds only the cases peculiar to that service.
+
 ## Backlog / TODO list
 
 The project's backlog — what Alexander means by **"my TODO list"** — is the GitHub
 Project **"Fantasy Hockey"** (pgaberra project #1):
 <https://github.com/users/pgaberra/projects/1> (`gh project view 1 --owner pgaberra`).
-Cards are GitHub Issues across the four repos, grouped by Status **Todo / In Progress /
+Cards are GitHub Issues across the repos, grouped by Status **Todo / In Progress /
 Done**. When starting a card, move it to *In Progress*; put `Closes #NN` in the PR
 description so the merge closes the issue.
 
@@ -86,7 +106,8 @@ and don't stop and wait for an answer unless the work genuinely can't continue w
 
 **Assume another agent is working in these repos right now.** Several sessions run against
 the same clones, so the checkout you find is *not* yours: it may sit on someone else's
-feature branch, with their half-finished edits in the working tree.
+feature branch, with their half-finished edits in the working tree — and often dozens of
+commits behind `master`, so read your own worktree rather than the shared checkout.
 
 Before you change anything, move into **your own git worktree** — never work directly in the
 shared checkout:
@@ -104,7 +125,7 @@ Cut the branch from `origin/master` **explicitly**, as above. A bare `git checko
 from whatever HEAD happens to be, and if that's another agent's in-flight branch your PR
 silently carries their commits into `master` alongside yours.
 
-Three more rules that follow from the same problem:
+Four more rules that follow from the same problem:
 
 - **Never `checkout`, `switch`, `stash`, `pull` or `reset` in the shared checkout.** It yanks
   the floor out from under whoever is editing there.
@@ -112,6 +133,8 @@ Three more rules that follow from the same problem:
   Modified files you don't recognise are someone else's work; leave them alone.
 - **Read the PR before merging** (`gh pr view <n> --json commits,files`). If it contains a
   commit or a file you didn't write, the branch was cut from the wrong base — fix that first.
+- **Run `gh` from inside the sub-repo** (or with `-R owner/repo`) — from the monorepo root it
+  silently resolves the wrong repo.
 
 A fresh `fantasy-web` worktree needs `npm ci` and `npm run generate:api` before lint/test/build
 will run, since `node_modules` and the generated `src/app/api` are not in git. The Gradle
