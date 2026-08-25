@@ -264,6 +264,31 @@ All inter-service HTTP uses **generated typed clients** from each service's Open
   reachable on the internal `coolify` network.
 - **Service-to-service auth:** shared `X-Internal-Api-Key` header (a perimeter check between
   trusted services, not per-user auth).
+- **Edge rate limiting (Traefik `api-ratelimit`):** `average=15` requests/second with
+  `burst=40`, per client IP, attached to the **https** router of each public app through
+  Coolify's label config (`…routers.https-0-<uuid>.middlewares=gzip,api-ratelimit`). Verify
+  the live values with `docker inspect <container> --format '{{range $k,$v := .Config.Labels}}…'`
+  and prove the limit with a burst of parallel `curl`s — expect a mix of 200 and 429.
+  - **A 429 from Traefik carries no CORS headers**, so a browser cannot read it: the request
+    surfaces in DevTools as an opaque *CORS error* with 0 bytes, and `fetch`/`HttpClient` sees
+    status 0 rather than 429. Any burst-y page therefore reports "network failure" when what
+    actually happened was a rate limit. Attach a CORS `headers` middleware **ahead of**
+    `api-ratelimit` in the router's chain so rejections come back legible — and note that
+    Traefik then answers preflights itself, which both takes them off the limiter's budget and
+    makes the label the second place the allowed origins are written down (the first being the
+    BFF's `CORS_ALLOWED_ORIGINS`). **Change the two together.** The labels, on the API app
+    (substitute each environment's own router uuid and origin list):
+
+    ```
+    traefik.http.middlewares.api-cors.headers.accessControlAllowOriginList=https://staging.slapstat.com,http://localhost:4200
+    traefik.http.middlewares.api-cors.headers.accessControlAllowCredentials=true
+    traefik.http.middlewares.api-cors.headers.accessControlAllowHeaders=Authorization,Content-Type,X-Requested-With
+    traefik.http.middlewares.api-cors.headers.accessControlAllowMethods=GET,POST,PUT,DELETE,OPTIONS
+    traefik.http.middlewares.api-cors.headers.accessControlMaxAge=1800
+    traefik.http.middlewares.api-cors.headers.addVaryHeader=true
+    traefik.http.routers.https-0-<uuid>.middlewares=gzip,api-cors,api-ratelimit
+    ```
+
 - **User auth:** the BFF issues JWTs (HS256); Google sign-in verifies Google ID tokens; Yahoo
   is a separate per-user OAuth handled by yahoo-service.
 - **Access gate — production is PUBLIC, staging is not.** The dev-phase gate locked HTTPS
