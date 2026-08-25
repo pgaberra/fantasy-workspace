@@ -276,8 +276,10 @@ All inter-service HTTP uses **generated typed clients** from each service's Open
     `api-ratelimit` in the router's chain so rejections come back legible — and note that
     Traefik then answers preflights itself, which both takes them off the limiter's budget and
     makes the label the second place the allowed origins are written down (the first being the
-    BFF's `CORS_ALLOWED_ORIGINS`). **Change the two together.** The labels, on the API app
-    (substitute each environment's own router uuid and origin list):
+    BFF's `CORS_ALLOWED_ORIGINS`). **Change the two together.** Attached on both API apps since
+    2026-08-25 — `staging-bff` allows `https://staging.slapstat.com,http://localhost:4200`,
+    `prod-bff` only `https://slapstat.com` (www is not a CORS origin there, and the edge list
+    must not quietly widen that). The labels, with each environment's own router uuid:
 
     ```
     traefik.http.middlewares.api-cors.headers.accessControlAllowOriginList=https://staging.slapstat.com,http://localhost:4200
