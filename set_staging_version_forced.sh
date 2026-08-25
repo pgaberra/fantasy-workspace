@@ -49,6 +49,16 @@ if ! curl -fsS -X PATCH "$BASE/applications/$UUID/envs" \
 fi
 
 # Redeploy so the new value takes effect (rebuild for web's build-arg; restart for the services).
-curl -fsS "$BASE/deploy?uuid=$UUID" -H "Authorization: Bearer $TOKEN" >/dev/null
+# POST, not GET: Coolify answers a GET here with 405, which stamped the version and then left
+# staging running the previous build. promote_forced.sh has always used POST — this is the same
+# endpoint, so the two now call it the same way.
+DEPLOY_RESPONSE="$(curl -fsS -X POST "$BASE/deploy?uuid=$UUID&force=false" -H "Authorization: Bearer $TOKEN")"
+DEPLOYMENT_UUID="$(jq -r '.deployments[0].deployment_uuid // ""' <<< "$DEPLOY_RESPONSE")"
+if [ -z "$DEPLOYMENT_UUID" ]; then
+  # A 2xx that queues nothing would leave the stamped version unbuilt without saying so, which
+  # is the same silence in a different shape.
+  echo "failed: deploy of $REPO returned no deployment uuid — version stamped but not built" >&2
+  exit 1
+fi
 
-echo "ok: $REPO staging -> $VERSION"
+echo "ok: $REPO staging -> $VERSION (deployment $DEPLOYMENT_UUID)"
