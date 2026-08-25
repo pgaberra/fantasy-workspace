@@ -291,6 +291,13 @@ All inter-service HTTP uses **generated typed clients** from each service's Open
     traefik.http.routers.https-0-<uuid>.middlewares=gzip,api-cors,api-ratelimit
     ```
 
+    Apply a label change with `POST /api/v1/applications/<uuid>/restart` (Coolify API, token at
+    `/root/.coolify_token` on prod). Measured on 2026-08-25: a restart regenerates
+    `/data/coolify/applications/<uuid>/docker-compose.yaml` from the stored labels and recreates
+    the container — no image rebuild, and `git_branch` is untouched, so a promoted prod stays on
+    its release tag (verified: prod-bff answered `v0.36.3` before and after). A full deploy would
+    also work but rebuilds for no reason.
+
 - **User auth:** the BFF issues JWTs (HS256); Google sign-in verifies Google ID tokens; Yahoo
   is a separate per-user OAuth handled by yahoo-service.
 - **Access gate — production is PUBLIC, staging is not.** The dev-phase gate locked HTTPS
