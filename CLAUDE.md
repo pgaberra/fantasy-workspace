@@ -100,6 +100,14 @@ and don't stop and wait for an answer unless the work genuinely can't continue w
 ## CI / workflow
 
 - Branch → push → PR → checks pass → **squash merge** to `master`.
+- The **PR title is the commit message** — squash merge ignores the branch commits, so the
+  title has to read as one (`feat: add X`, `fix: correct Y`). Rename it first with
+  `gh pr edit <n> --title "..."` if needed, and never merge a PR titled "wip" or "draft".
+- **Check the PR isn't stale before merging.** PR Checks tests the branch merged against
+  whatever `master` was when the check last ran — not continuously, and not again after a
+  merge. If `master` has moved since, merge it into the branch and let checks run again;
+  otherwise the squashed result combines code that was never built or tested together.
+  Nothing enforces this but whoever merges (branch protection needs GitHub Pro).
 - `@claude` mentions on issues/PRs trigger the Claude workflow in each repo.
 
 ### Working in parallel — one worktree per agent
@@ -139,29 +147,3 @@ Four more rules that follow from the same problem:
 A fresh `fantasy-web` worktree needs `npm ci` and `npm run generate:api` before lint/test/build
 will run, since `node_modules` and the generated `src/app/api` are not in git. The Gradle
 services need nothing extra.
-
-### Merging PRs
-
-GitHub squash merge uses the **PR title** as the commit message — the individual
-branch commits are ignored. Before merging:
-
-1. Check the PR isn't stale against `master`. PR Checks tests the PR branch merged
-   against whatever `master` was when the check last ran — not continuously — and (since
-   it was cut as a minutes-saving duplicate) it no longer re-runs after merge either. If
-   another PR has merged to `master` since this one's last green check, `git merge
-   origin/master` (or rebase) into the branch and let checks run again before merging —
-   otherwise the squash-merged result combines code that was never actually built or
-   tested together. `gh pr view <n> --json baseRefOid` plus `git log <that-sha>..origin/master`
-   tells you whether `master` has moved past what the PR's check ran against; no repos on
-   this account can enforce this with branch protection (private repos need GitHub Pro),
-   so it's on whoever merges to check.
-2. Ensure the PR title is a proper commit message (e.g. `feat: add X`, `fix: correct Y`).
-   Rename it first with `gh pr edit <n> --title "..."` if needed.
-3. Merge with an explicit subject so the commit message is never left to chance:
-   ```
-   gh pr merge <n> --squash --delete-branch \
-     --subject "feat: describe the change (#<n>)" \
-     --body "Optional longer description."
-   ```
-
-Never merge a PR titled "wip", "draft", or similar.
