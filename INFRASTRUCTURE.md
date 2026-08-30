@@ -398,7 +398,7 @@ the `POSTHOG_KEY` build arg (empty ⇒ analytics off, and `posthog-js` isn't eve
 | Ship to **production** | **Publish that version's GitHub Release.** `promote-to-prod.yml` pins, deploys and verifies. |
 | **Roll back** prod | Run `promote-to-prod` manually (`workflow_dispatch`) with the older tag. |
 | Check prod isn't drifting | `check_prod_pins.sh` (in this repo, not installed) — copy it to the prod server and run it; it fails if any app is on a branch rather than a `vX.Y.Z` tag, or shows webhook-triggered deployments. |
-| Refresh **NHL data** | `POST /api/v1/sync` on the nhl-service (API-key protected); re-run after rosters update. |
+| Refresh the **player pool** | Whichever source that environment runs: staging sets `PLAYERS_SOURCE=espn` → `POST /api/v1/espn/players/sync` on espn-service (last run: `GET /api/v1/espn/players/sync/latest`); production leaves it unset, so yahoo → `POST /api/v1/sync` on yahoo-service. Both internal — send `X-Internal-Api-Key`. Each also syncs itself nightly, so this only forces one early. |
 | **Change** the allowed IP (dev gate) | `ALLOW_IP=<ip> /root/ip-allowlist.sh` on both servers. |
 | **Go public** (launch) | `FLUSH=1 /root/ip-allowlist.sh` + disable `ip-allowlist.service` on prod. |
 | See versions | Each repo's tags / GitHub Releases (`vX.Y.Z`). |
