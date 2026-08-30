@@ -334,6 +334,54 @@ All inter-service HTTP uses **generated typed clients** from each service's Open
     script also allows GitHub's hook IP ranges on :443. **Port 80 stays open** regardless, so
     http→https redirects and Let's Encrypt renewal keep working; **SSH is untouched.**
 
+### Reaching a database
+
+Every Postgres is a Coolify-managed database on the internal `coolify` network with **no public
+port** — the Hetzner firewall allows 22, 80 and 443, and none of those reach 5432. There is no
+host to point a client at, so the way in is to run `psql` **inside the container**, over SSH, the
+same shape the service CLIs are run in:
+
+```
+echo 'select count(*) from skater_season;' \
+  | ssh root@<server> 'docker exec -i $(docker ps -q --filter name=^<uuid> | head -1) \
+      sh -c "psql -U \$POSTGRES_USER -d \$POSTGRES_DB"'
+```
+
+The SQL travels on **stdin**, which is why there is no quoting of it to get wrong: `psql` with no
+`-c` reads its input from there, `docker exec -i` forwards it, and so does `ssh`.
+
+`POSTGRES_USER` / `POSTGRES_DB` are set inside the container by the Postgres image itself, so the
+command needs neither the credentials nor the database name — which differ per app and per
+environment. They have to expand **in the container**, which is what the inner `sh -c` and the
+escaped `\$` are for: the server's own shell has no such variables, and letting it expand them
+sends `psql -U -d` with two empty arguments. The `name=^<uuid>` prefix filter is the same trick
+`health-monitor.sh` uses: it survives a redeploy, which changes a container's suffix but not its
+prefix.
+
+| Database | Staging uuid | Production uuid |
+|---|---|---|
+| db-service | `tfe2vqjob3nplmppicy37bgu` | `n13p7tfhwnfjlk2b23t4j60l` |
+| yahoo-service | `wn3g7ygq9mfxmno9bsfsnqtu` | `xyj08tjkfmfac956kb5hfumt` |
+| espn-service | `nj5pnanlz5efnlj5q65uposk` | `uiwdejlqvsbpvwfkbsaepobl` |
+| projection-service | `g39gpcrzw42yzularicxle74` | `iqxk0i5swnh8ga31lf7f45zp` |
+
+Same values as the `pg` rows in `health-monitor.<env>.conf`; keep the two in step. Servers:
+staging `62.238.17.178`, production `157.180.126.72`.
+
+**Production is the live database and this is a root shell into it.** Read freely; anything that
+writes belongs in a migration (Flyway for the Java services, Alembic for projection-service), not
+in a `psql` session — a hand-edited row is invisible to every other environment and to the next
+deploy.
+
+> **Why there is no MCP server for this.** `.mcp.json` used to carry two of them
+> (`postgres-staging-db`, `postgres-staging-yahoo`), pointed at `localhost:5433` / `:5434` with a
+> launcher under `C:\Users\Alexander\.postgres-mcp`. Both were removed in August 2026: that path
+> is one particular machine's home directory, so the servers could not start anywhere else, and
+> the ports presumed SSH tunnels that nothing sets up or documents. They also covered two of the
+> four databases. The route above needs no tunnel, no local client and no per-machine config — so
+> it is the one to reach for, and the one to fix if it stops working, rather than reviving a
+> client that carries the same prerequisites and reaches less.
+
 ### Observability & alerting (Sentry)
 
 The four **Java** backend services (bff, db, yahoo, espn) forward every **ERROR-level log**
@@ -432,6 +480,7 @@ the `POSTHOG_KEY` build arg (empty ⇒ analytics off, and `posthog-js` isn't eve
 | **Go public** (launch) | `FLUSH=1 /root/ip-allowlist.sh` + disable `ip-allowlist.service` on prod. |
 | See versions | Each repo's tags / GitHub Releases (`vX.Y.Z`). |
 | Operate Coolify | `https://coolify.slapstat.com`, or its REST API via the prod server. |
+| **Query a database** | `psql` inside the container over SSH — the databases have no public port. The command and the per-environment uuids: *Reaching a database* in §8. |
 | **Debug a backend error** (Sentry alert) | Open the Sentry issue → triage → fix → deploy. Full runbook: [`TROUBLESHOOTING.md`](./TROUBLESHOOTING.md). |
 | Refresh the **projection store** now (rookies, player identities) | `systemctl start projection-sync.service` on staging, then `journalctl -u projection-sync.service -n 50`. Runs daily on its own — see *Scheduled jobs* in §8. |
 
