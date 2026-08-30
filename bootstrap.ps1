@@ -25,6 +25,5 @@ foreach ($r in $repos) {
 
 Write-Host ""
 Write-Host "Klart. Aterstar manuellt:"
-Write-Host "  1. Kopiera ~/.postgres-mcp (pgpass.conf + scripten) fran den andra maskinen."
-Write-Host "  2. Justera sokvagarna i .mcp.json om hemkatalogen heter nagot annat har."
-Write-Host "  3. Satt env-variablerna for bootRun (DB_PASSWORD, INTERNAL_API_KEY m.fl.)."
+Write-Host "  1. Satt env-variablerna for bootRun (DB_PASSWORD, INTERNAL_API_KEY m.fl.)."
+Write-Host "  2. Databaserna nas med psql inne i containern over SSH - se Reaching a database i INFRASTRUCTURE.md."
