@@ -97,6 +97,19 @@ finding kept back because it "wasn't part of the ticket" is a finding nobody get
 Report it and carry on with the task at hand — don't quietly widen the change to cover it,
 and don't stop and wait for an answer unless the work genuinely can't continue without one.
 
+## Text on the site
+
+No em dashes (—) in copy a user reads in the app: headings, labels, buttons, help text,
+empty states, error and toast messages, tooltips, the privacy page, page titles and meta
+descriptions — wherever it lives, a `fantasy-web` template or a message a backend service
+hands to the frontend. Use a comma, a colon, parentheses or two sentences instead.
+
+This is about prose. An en dash in a numeric range (`3–20 characters`) and a dash standing
+in for an empty table cell are typography, not punctuation, and stay.
+
+Commit messages, PR descriptions, issue comments and code comments are not covered —
+punctuate those however you like.
+
 ## CI / workflow
 
 - Branch → push → PR → checks pass → **squash merge** to `master`.
