@@ -435,14 +435,13 @@ the `POSTHOG_KEY` build arg (empty ⇒ analytics off, and `posthog-js` isn't eve
 - Versions in production: web `v0.90.9`, bff `v0.35.1`, db-service `v0.16.3`,
   yahoo-service `v0.9.0`, espn-service `v0.1.0`. Each prod app's `git_branch` is its release
   tag; staging follows `master`.
-- **`fantasy-projection-service` runs in production — the *feature* is what is off.** This
-  entry used to say the service was stopped there; checked on 2026-08-30, the prod container
-  is up, healthy, on the `coolify` network as `projection-service`, and the prod BFF carries
-  `PROJECTION_SERVICE_URL` pointing at it. What holds the feature back is `PROJECTION_MODEL_ENABLED`
-  being unset, so the BFF denies `/api/v1/projection-model/**`; who may read the model is still
-  undecided ([fantasy-bff#105](https://github.com/pgaberra/fantasy-bff/issues/105)). Worth
-  deciding whether the container running is intended — nothing user-facing reads it, but it is
-  not the posture this document described.
+- **`fantasy-projection-service` runs in production, and is meant to.** This entry used to say
+  it was stopped there; that was wrong, and as of 2026-08-30 the service is confirmed as
+  intended in both environments and monitored in both. What is still off is the **feature**:
+  `PROJECTION_MODEL_ENABLED` is unset on the prod BFF, so it denies `/api/v1/projection-model/**`,
+  and who may read the model remains undecided
+  ([fantasy-bff#105](https://github.com/pgaberra/fantasy-bff/issues/105)). Running the service
+  and exposing the model are two separate decisions; only the first is settled.
 - **Rookie markers do not reach production yet, for a separate reason:** prod's BFF is
   `v0.36.3`, which predates `GET /api/v1/players/rookies` entirely — the path 401s there while
   staging serves it. That is a version gap, not a switch.
