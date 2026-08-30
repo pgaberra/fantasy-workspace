@@ -1,7 +1,7 @@
 # Troubleshooting — "I got a Sentry error, now what?"
 
 The runbook for debugging a backend error, end to end. Backend services (bff, db-service,
-nhl-service, yahoo-service) forward every **ERROR-level log** to **Sentry**, which emails you
+espn-service, yahoo-service) forward every **ERROR-level log** to **Sentry**, which emails you
 and groups the error into an issue. (Architecture & deploy model: see `INFRASTRUCTURE.md`.)
 
 > Quick links: **Sentry** project `slapstat-backend` · **Coolify** `https://coolify.slapstat.com`
@@ -17,7 +17,7 @@ Click through to the **issue in Sentry**. That's the main surface. It tells you:
 |---|---|
 | **Environment** tag | `staging` or `production` — which env the error came from. |
 | **Release** | the version, e.g. `v0.2.1` (prod only; staging shows none — it's always latest). |
-| **Culprit / stack trace** | the exact file + line, and the Java package → **which service**: `com.fantasy.db` = db-service, `.nhl` = nhl-service, `.bff` = bff, `.yahoo` = yahoo-service. |
+| **Culprit / stack trace** | the exact file + line, and the Java package → **which service**: `com.fantasy.db` = db-service, `.espn` = espn-service, `.bff` = bff, `.yahoo` = yahoo-service. A Python traceback is projection-service, which has no Sentry SDK — it will not appear here at all, so look in its container logs. |
 | **Breadcrumbs** | the INFO logs *just before* the error — often enough to see what led there. |
 | **Events / frequency** | first seen, last seen, count. Grouped, so one recurring error = one issue. |
 

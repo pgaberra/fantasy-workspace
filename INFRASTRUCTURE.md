@@ -16,8 +16,9 @@ How the whole thing hangs together: source code → build → deploy → serve, 
 
 ```
                          ┌─────────────────────────── GitHub (org: pgaberra) ───────────────────────────┐
-                         │  fantasy-web · fantasy-bff · fantasy-db-service · fantasy-nhl-service ·       │
-                         │  fantasy-yahoo-service   — each its own repo, squash-merged to `master`       │
+                         │  fantasy-web · fantasy-bff · fantasy-db-service · fantasy-yahoo-service ·     │
+                         │  fantasy-espn-service · fantasy-projection-service                            │
+                         │  — each its own repo, squash-merged to `master`                               │
                          │  CI: build/test + OpenAPI drift checks · auto-tag SemVer + Release on merge   │
                          └───────────────┬──────────────────────────────────────────────┬──────────────┘
                                          │ (GitHub App push events / git clone at build) │
@@ -34,9 +35,10 @@ How the whole thing hangs together: source code → build → deploy → serve, 
                                  │  │ web (nginx:80) │   │                      │  │ web (nginx:80) │    │
                                  │  │ bff (:8080)    │   │                      │  │ bff (:8080)    │    │
                                  │  │ db-svc (:8086) │   │   ← same shape →      │  │ db-svc (:8086) │    │
-                                 │  │ nhl-svc (:8087)│   │                      │  │ nhl-svc (:8087)│    │
                                  │  │ yahoo  (:8088) │   │                      │  │ yahoo  (:8088) │    │
-                                 │  │ 3× Postgres    │   │                      │  │ 3× Postgres    │    │
+                                 │  │ espn   (:8090) │   │                      │  │ espn   (:8090) │    │
+                                 │  │ projec.(:8092) │   │                      │  │ projec.(:8092) │    │
+                                 │  │ 4× Postgres    │   │                      │  │ 4× Postgres    │    │
                                  │  └────────────────┘   │                      │  └────────────────┘    │
                                  │  (all on the internal │                      │  (internal `coolify`   │
                                  │   `coolify` network)  │                      │   docker network)      │
@@ -50,7 +52,7 @@ How the whole thing hangs together: source code → build → deploy → serve, 
 ## 2. The platforms — what each does and why
 
 ### GitHub (org `pgaberra`) — source of truth & CI/CD trigger
-- Five repos, one per service. Branch → PR → checks pass → **squash-merge to `master`**.
+- Six repos, one per service. Branch → PR → checks pass → **squash-merge to `master`**.
 - The squash commit message **is the PR title**, so PR titles use Conventional Commits
   (`feat:`, `fix:`, `chore:`) — that drives the version bump (see §6).
 - Coolify is connected via a **GitHub App** (source name `coolify-slapstat`) so it can clone
@@ -87,8 +89,8 @@ How the whole thing hangs together: source code → build → deploy → serve, 
   `coolify`. Containers talk to each other over this private network — **not** over the public
   internet.
 - Internal services are reachable by **stable network aliases** instead of unstable container
-  names: `db-service:8086`, `nhl-service:8087`, `yahoo-service:8088`. That's how the BFF finds
-  them regardless of redeploys.
+  names: `db-service:8086`, `yahoo-service:8088`, `espn-service:8090` and
+  `projection-service:8092`. That's how the BFF finds them regardless of redeploys.
 
 ### Traefik (`coolify-proxy`) — reverse proxy + TLS terminator
 - One per server (Coolify deploys it). It's the single entry point for ports 80/443.
@@ -101,7 +103,7 @@ How the whole thing hangs together: source code → build → deploy → serve, 
 
 ---
 
-## 3. The five services
+## 3. The six services
 
 The web app talks **only** to the BFF. The BFF orchestrates the backend services. Backend
 services never talk to each other.
@@ -111,16 +113,30 @@ services never talk to each other.
 | **fantasy-web** | Angular → nginx | 80 | ✅ `slapstat.com` | — | The UI (a static SPA). |
 | **fantasy-bff** | Spring Boot (Java) | 8080 | ✅ `api.slapstat.com` | — | Backend-for-Frontend: auth (JWT/Google), orchestrates the backends, shapes responses for the UI. The only backend the web calls. |
 | **fantasy-db-service** | Spring Boot | 8086 | ❌ internal | own Postgres | Owns users + saved projections (the app's database layer). |
-| **fantasy-nhl-service** | Spring Boot | 8087 | ❌ internal | own Postgres | Mirrors NHL player/roster/stats data (synced from the public NHL API). |
-| **fantasy-yahoo-service** | Spring Boot | 8088 | ⚠️ `yahoo.slapstat.com` (OAuth callback only) + internal alias | own Postgres | Per-user Yahoo Fantasy OAuth + league data; stores tokens encrypted. |
+| **fantasy-yahoo-service** | Spring Boot | 8088 | ⚠️ `yahoo.slapstat.com` (OAuth callback only) + internal alias | own Postgres | Per-user Yahoo Fantasy OAuth + league data (tokens stored encrypted), and one of the two cached player read models. |
+| **fantasy-espn-service** | Spring Boot | 8090 | ❌ internal | own Postgres | ESPN league data and the other cached player read model, refreshed nightly. Needs no per-user OAuth: ESPN's player endpoint is public. |
+| **fantasy-projection-service** | Python (FastAPI) | 8092 | ❌ internal | own Postgres | The multi-season NHL stat store, the projection model that seeds a user's projection from a baseline, and rookie status. Runs in **both** environments; what is switched off in production is the *feature*, not the service — see §10. |
 
-- **Internal services** (`db`, `nhl`) have **no public domain** — only the BFF reaches them
-  over the `coolify` network, authenticated with a shared **`X-Internal-Api-Key`** header.
+**Which player pool is live is a per-environment choice**, `PLAYERS_SOURCE` on the BFF: staging
+runs `espn`, production leaves it unset and gets the default `yahoo`. The two carry the same
+shape but **not the same player ids**, and a saved projection is keyed by whichever ids were in
+use when it was saved — so flipping it is a data migration, not a config change.
+
+The two services that were here until 2026 are gone: **fantasy-nhl-service** and
+**fantasy-player-service** were retired once all player data — stats, positions and identity —
+came from the fantasy platforms instead of the NHL's own API. Their Coolify apps no longer
+exist. The projection service is the only thing that still reads `api-web.nhle.com`, and it
+does so for history the platforms do not publish.
+
+- **Internal services** (`db`, `espn`, `projection`) have **no public domain** — only the BFF
+  reaches them over the `coolify` network, authenticated with a shared
+  **`X-Internal-Api-Key`** header.
 - **yahoo-service** is the exception: it needs a public domain because Yahoo's OAuth redirect
   hits it from the user's browser. Every `/api/**` endpoint still requires the internal API
   key; only `/api/v1/yahoo/oauth/callback` is exempt (it's secured by a signed `state`).
-- **Separate Postgres per service** (separation of concern). Schemas are owned by **Flyway**
-  migrations that run on each service's startup.
+- **Separate Postgres per service** (separation of concern). Schemas are owned by migrations
+  that run on each service's startup: **Flyway** for the Java services, **Alembic** for
+  projection-service, which is the same discipline in the language it is written in.
 
 ---
 
@@ -136,7 +152,8 @@ services never talk to each other.
 | `yahoo.staging.slapstat.com` | staging | yahoo-service | staging OAuth callback |
 | `coolify.slapstat.com` | prod | Coolify | the deploy dashboard |
 
-All are **A records, DNS-only**. `db-service` / `nhl-service` are intentionally absent (internal only).
+All are **A records, DNS-only**. The internal services are intentionally absent — `db-service`,
+`espn-service` and `projection-service` have no public hostname at all.
 
 ---
 
@@ -147,7 +164,7 @@ All are **A records, DNS-only**. `db-service` / `nhl-service` are intentionally 
 (`https://api.slapstat.com`) **baked in at build time**.
 
 **An API call:** browser → `api.slapstat.com` → Traefik → BFF. The BFF validates the user's
-**JWT**, then (if needed) calls `http://db-service:8086` / `http://nhl-service:8087` /
+**JWT**, then (if needed) calls `http://db-service:8086` / `http://espn-service:8090` /
 `http://yahoo-service:8088` over the internal network with the `X-Internal-Api-Key` header,
 shapes the result, and returns it.
 
@@ -260,7 +277,8 @@ All inter-service HTTP uses **generated typed clients** from each service's Open
 ## 8. Networking & security
 
 - **Hetzner Cloud Firewall:** inbound limited to 22 (SSH), 80, 443.
-- **Internal services not exposed:** `db-service` / `nhl-service` have no public domain; only
+- **Internal services not exposed:** `db-service`, `espn-service` and `projection-service`
+  have no public domain; only
   reachable on the internal `coolify` network.
 - **Service-to-service auth:** shared `X-Internal-Api-Key` header (a perimeter check between
   trusted services, not per-user auth).
@@ -318,10 +336,13 @@ All inter-service HTTP uses **generated typed clients** from each service's Open
 
 ### Observability & alerting (Sentry)
 
-The four backend services forward every **ERROR-level log** (with stack trace) to **Sentry**
+The four **Java** backend services (bff, db, yahoo, espn) forward every **ERROR-level log**
+(with stack trace) to **Sentry**
 (`sentry-logback` appender; `SENTRY_DSN` / `SENTRY_ENVIRONMENT` env, and `SENTRY_RELEASE` = the
 version on prod). A genuine fault → a grouped Sentry issue → an **email**. Only real faults log
-at ERROR (4xx outcomes don't), so alerts stay low-noise.
+at ERROR (4xx outcomes don't), so alerts stay low-noise. **projection-service is not wired to
+Sentry** — it is Python and carries no SDK, so its failures surface only in container logs and
+in whatever calls it. `projection-sync.sh` posts its own events for that reason.
 **→ Got an alert? How to debug it: [`TROUBLESHOOTING.md`](./TROUBLESHOOTING.md).**
 
 ### Scheduled jobs (systemd timers on the boxes)
@@ -414,11 +435,17 @@ the `POSTHOG_KEY` build arg (empty ⇒ analytics off, and `posthog-js` isn't eve
 - Versions in production: web `v0.90.9`, bff `v0.35.1`, db-service `v0.16.3`,
   yahoo-service `v0.9.0`, espn-service `v0.1.0`. Each prod app's `git_branch` is its release
   tag; staging follows `master`.
-- **`fantasy-projection-service` is deliberately stopped in production.** Its Coolify app and
-  database exist and staging runs it, but who may read the model is undecided
-  ([fantasy-bff#105](https://github.com/pgaberra/fantasy-bff/issues/105)), so the service is
-  off and the BFF denies `/api/v1/projection-model/**` unless `PROJECTION_MODEL_ENABLED` says
-  otherwise.
+- **`fantasy-projection-service` runs in production — the *feature* is what is off.** This
+  entry used to say the service was stopped there; checked on 2026-08-30, the prod container
+  is up, healthy, on the `coolify` network as `projection-service`, and the prod BFF carries
+  `PROJECTION_SERVICE_URL` pointing at it. What holds the feature back is `PROJECTION_MODEL_ENABLED`
+  being unset, so the BFF denies `/api/v1/projection-model/**`; who may read the model is still
+  undecided ([fantasy-bff#105](https://github.com/pgaberra/fantasy-bff/issues/105)). Worth
+  deciding whether the container running is intended — nothing user-facing reads it, but it is
+  not the posture this document described.
+- **Rookie markers do not reach production yet, for a separate reason:** prod's BFF is
+  `v0.36.3`, which predates `GET /api/v1/players/rookies` entirely — the path 401s there while
+  staging serves it. That is a version gap, not a switch.
 - **Three features ship dark**, present in production but switched off: subscriptions
   (`PAYMENTS_ENABLED=false`), the ESPN league sync (`ESPN_LEAGUES_ENABLED` unset on the web),
   and the projection model (above).
