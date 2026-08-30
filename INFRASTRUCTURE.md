@@ -324,6 +324,44 @@ version on prod). A genuine fault → a grouped Sentry issue → an **email**. O
 at ERROR (4xx outcomes don't), so alerts stay low-noise.
 **→ Got an alert? How to debug it: [`TROUBLESHOOTING.md`](./TROUBLESHOOTING.md).**
 
+### Scheduled jobs (systemd timers on the boxes)
+
+Neither Coolify nor the services themselves run these, so they are plain systemd timers. The
+units and their scripts live in this repo and are **copied onto the server by hand** — nothing
+deploys them, so a change here is not live until someone installs it.
+
+| Timer | Where | Cadence | What |
+|---|---|---|---|
+| `health-monitor.timer` | both | every 2 min | `health-monitor.sh` — probes each container from `health-monitor.<env>.conf`, raises a Sentry event on up↔down transitions. |
+| `projection-sync.timer` | **staging only** | daily 04:30 UTC | `projection-sync.sh` — `projection rosters` then `projection ingest --season <current>` inside the projection-service container. |
+
+`projection-sync` exists because **projection-service has no scheduler of its own** and its
+ingestion is otherwise run by hand. The asymmetry is worth understanding: the ESPN player pool
+syncs itself nightly (07:45 UTC), so the app learns about a newly signed prospect within a day
+— but rookie status is decided from the projection store, and until that store is told he
+exists it answers "not a rookie" and he reads on screen as a veteran. That is exactly how the
+rookie markers went wrong in August 2026. The timer fires before the ESPN sync so the two sides
+of the id match stay in step.
+
+Staging only, because production deliberately runs no projection-service (see §10). Failures go
+to Sentry through the same `/root/.health-dsn`, since a silently stalled ingest breaks nothing
+visible — the markers just quietly stop being true.
+
+Install (staging):
+
+```
+scp projection-sync.sh root@62.238.17.178:/root/
+scp projection-sync.service projection-sync.timer root@62.238.17.178:/etc/systemd/system/
+ssh root@62.238.17.178 'chmod +x /root/projection-sync.sh && systemctl daemon-reload && systemctl enable --now projection-sync.timer'
+```
+
+Run it now, off-schedule: `systemctl start projection-sync.service`.
+Read the last run: `journalctl -u projection-sync.service -n 50`.
+
+**One thing no timer covers:** `PROJECTION_SEASON` on the BFF is the season rookie status is
+computed for. It is a plain env var and must be bumped by hand each summer — miss it and every
+rookie answer is silently for the wrong season.
+
 ### Usage analytics (PostHog)
 
 Sentry answers *"did something break?"*. **PostHog** answers *"is anyone using this, and where
@@ -366,6 +404,7 @@ the `POSTHOG_KEY` build arg (empty ⇒ analytics off, and `posthog-js` isn't eve
 | See versions | Each repo's tags / GitHub Releases (`vX.Y.Z`). |
 | Operate Coolify | `https://coolify.slapstat.com`, or its REST API via the prod server. |
 | **Debug a backend error** (Sentry alert) | Open the Sentry issue → triage → fix → deploy. Full runbook: [`TROUBLESHOOTING.md`](./TROUBLESHOOTING.md). |
+| Refresh the **projection store** now (rookies, player identities) | `systemctl start projection-sync.service` on staging, then `journalctl -u projection-sync.service -n 50`. Runs daily on its own — see *Scheduled jobs* in §8. |
 
 ---
 
