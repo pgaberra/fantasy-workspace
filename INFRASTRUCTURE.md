@@ -354,19 +354,23 @@ deploys them, so a change here is not live until someone installs it.
 | Timer | Where | Cadence | What |
 |---|---|---|---|
 | `health-monitor.timer` | both | every 2 min | `health-monitor.sh` — probes each container from `health-monitor.<env>.conf`, raises a Sentry event on up↔down transitions. |
-| `projection-sync.timer` | **staging only** | daily 04:30 UTC | `projection-sync.sh` — `projection rosters` then `projection ingest --season <current>` inside the projection-service container. |
+| `projection-sync.timer` | **staging today**, prod pending | daily 04:30 UTC | `projection-sync.sh` — `projection rosters`, `projection ingest --season <current>`, then `projection project --season <target>` inside the projection-service container. |
 
 `projection-sync` exists because **projection-service has no scheduler of its own** and its
-ingestion is otherwise run by hand. The asymmetry is worth understanding: the ESPN player pool
+ingestion is otherwise run by hand. The run ends with a **re-projection**, which is what makes
+the ingestion visible: the read API serves stored `projection` rows, so a store that moves
+without one leaves every number on screen where the last hand-run left it. The asymmetry is worth understanding: the ESPN player pool
 syncs itself nightly (07:45 UTC), so the app learns about a newly signed prospect within a day
 — but rookie status is decided from the projection store, and until that store is told he
 exists it answers "not a rookie" and he reads on screen as a veteran. That is exactly how the
 rookie markers went wrong in August 2026. The timer fires before the ESPN sync so the two sides
 of the id match stay in step.
 
-Staging only, because production deliberately runs no projection-service (see §10). Failures go
-to Sentry through the same `/root/.health-dsn`, since a silently stalled ingest breaks nothing
-visible — the markers just quietly stop being true.
+Installed on staging. **Production runs projection-service too** (§10) and needs the same
+install before the model is switched on there — the timer was staging-only on the strength of
+the claim that prod deliberately ran no projection-service, which was wrong. Failures go to
+Sentry through the same `/root/.health-dsn`, since a silently stalled sync breaks nothing
+visible — the markers just quietly stop being true, and the projections quietly stop moving.
 
 Install (staging):
 
@@ -380,8 +384,12 @@ Run it now, off-schedule: `systemctl start projection-sync.service`.
 Read the last run: `journalctl -u projection-sync.service -n 50`.
 
 **One thing no timer covers:** `PROJECTION_SEASON` on the BFF is the season rookie status is
-computed for. It is a plain env var and must be bumped by hand each summer — miss it and every
-rookie answer is silently for the wrong season.
+computed for, and the season the app asks the model for. It is a plain env var and must be
+bumped by hand each summer — miss it and every rookie answer is silently for the wrong season.
+The sync script derives its own projection target instead (calendar year from July, the year
+before until then), so the two have to be bumped **in step**: if the env var says one season and
+the timer projects another, the seed endpoint answers 200 with an empty list and nothing says
+why.
 
 ### Usage analytics (PostHog)
 
