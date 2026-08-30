@@ -1,0 +1,14 @@
+# Installed on the STAGING server as /etc/systemd/system/projection-sync.service.
+# Pairs with projection-sync.timer; see projection-sync.sh for what it does and why.
+[Unit]
+Description=SlapStat projection store ingestion (rosters + season stats)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/root/projection-sync.sh
+# The two commands make a few thousand polite NHL API calls between them, so the run is long by
+# a timer's standards. The cap is there to stop a hung upstream holding the unit open until the
+# next firing rather than to bound normal work, which takes well under half of it.
+TimeoutStartSec=90min
