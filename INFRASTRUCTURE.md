@@ -316,6 +316,41 @@ All inter-service HTTP uses **generated typed clients** from each service's Open
     its release tag (verified: prod-bff answered `v0.36.3` before and after). A full deploy would
     also work but rebuilds for no reason.
 
+  - **Headshots are exempt (`avatar-ratelimit`), since 2026-08-31.** A player table draws one
+    avatar per row, so 15/s is a page of broken images — which is exactly why the ESPN pool's
+    pictures were sent to ESPN's CDN instead, at the cost of the framing. A second router carries
+    that one route past the limiter on both API apps:
+
+    ```
+    traefik.http.middlewares.avatar-ratelimit.ratelimit.average=100
+    traefik.http.middlewares.avatar-ratelimit.ratelimit.burst=300
+    traefik.http.routers.https-avatars-<uuid>.entryPoints=https
+    traefik.http.routers.https-avatars-<uuid>.middlewares=gzip,api-cors,avatar-ratelimit
+    traefik.http.routers.https-avatars-<uuid>.priority=1000
+    traefik.http.routers.https-avatars-<uuid>.rule=Host(`<api host>`) && PathRegexp(`^/api/v1/players/[0-9]+/headshot$`)
+    traefik.http.routers.https-avatars-<uuid>.service=https-0-<uuid>
+    traefik.http.routers.https-avatars-<uuid>.tls.certresolver=letsencrypt
+    traefik.http.routers.https-avatars-<uuid>.tls=true
+    ```
+
+    It is a safe thing to widen: a public, unauthenticated GET of a ~16 kB PNG out of a bounded
+    set of player ids, cached for a week. `api-cors` stays in the chain, and the path matcher
+    ignores the `?v=` recipe the address carries. `priority` is explicit rather than left to
+    Traefik's rule-length ordering, which would otherwise quietly depend on how long the API's
+    hostname is. Rolling back is deleting those nine labels and restarting; the labels as they
+    were are kept beside them on prod as `/root/labels-<uuid>-<timestamp>.backup.txt`.
+
+    Proving it, from a machine that is not the server (from the server itself the proxy sees a
+    source that the limiter does not count, and every burst comes back clean whatever the config
+    says) — 60 parallel requests, measured on staging on 2026-08-31:
+
+    ```
+    for i in $(seq 1 60); do curl -s -o /dev/null -w "%{http_code}
+"       "https://api.staging.slapstat.com/api/v1/players/$((3895074+i))/headshot" & done | sort | uniq -c
+    # before: 53 404, 7 429      after: 60 404, no 429
+    # control, same burst against /api/v1/versions: 57 200, 3 429 — the limiter still bites elsewhere
+    ```
+
 - **User auth:** the BFF issues JWTs (HS256); Google sign-in verifies Google ID tokens; Yahoo
   is a separate per-user OAuth handled by yahoo-service.
 - **Access gate — production is PUBLIC, staging is not.** The dev-phase gate locked HTTPS
