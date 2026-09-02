@@ -437,7 +437,7 @@ deploys them, so a change here is not live until someone installs it.
 | Timer | Where | Cadence | What |
 |---|---|---|---|
 | `health-monitor.timer` | both | every 2 min | `health-monitor.sh` — probes each container from `health-monitor.<env>.conf`, raises a Sentry event on up↔down transitions. |
-| `projection-sync.timer` | **staging today**, prod pending | daily 04:30 UTC | `projection-sync.sh` — `projection rosters`, `projection ingest --season <current>`, then `projection project --season <target>` inside the projection-service container. |
+| `projection-sync.timer` | **staging today**, prod pending | daily 04:30 UTC | `projection-sync.sh` — `projection rosters`, `projection ingest --season <current>`, `projection injuries`, then `projection project --season <target>` inside the projection-service container. |
 
 `projection-sync` exists because **projection-service has no scheduler of its own** and its
 ingestion is otherwise run by hand. The run ends with a **re-projection**, which is what makes

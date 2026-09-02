@@ -9,9 +9,15 @@
 #
 #   projection rosters                   who exists — rosters + prospect lists, identity only
 #   projection ingest --season <year>    what they played — MoneyPuck + NHL boxcar
+#   projection injuries                  who is hurt right now — ESPN's report
 #   projection project --season <year>   what we think they will do — the model's own output
 #
-# The third one is what makes the first two visible. The API serves stored projection rows, so
+# The injuries step is the one that has to run *often* rather than once. It is a snapshot with no
+# archive, the return dates are a club's guess and they slip, and the projection is only as fresh
+# as the last refresh: a player listed back on 7 November has to stop being deducted once he is
+# back. It runs before the projection because the projection reads it.
+#
+# The last one is what makes the others visible. The API serves stored projection rows, so
 # data that lands without a re-projection changes nothing a user can see: the store moves and
 # the numbers on screen stay where the last hand-run left them. It goes last because it reads
 # what the other two write.
@@ -118,6 +124,19 @@ fi
 # Re-project even if the ingest above failed. The model reads the store rather than the fetch, so
 # the worst case is that it reproduces yesterday's numbers — while skipping it after a failed
 # fetch would strand every earlier day's data behind a stale projection for no gain.
+# Injuries before the projection, because the projection reads them. Its own failure is not
+# fatal to the run: an injury table one day stale is a smaller error than no re-projection at
+# all, and the model treats a player it knows nothing about as fit, which is what it did before
+# this step existed.
+log "projection injuries"
+if output=$(docker exec "$CID" projection injuries 2>&1); then
+  log "  $output"
+else
+  log "  FAILED: $output"
+  send_sentry error "projection-sync: projection injuries failed"
+  failed=1
+fi
+
 log "projection project --season ${TARGET}"
 if output=$(docker exec "$CID" projection project --season "$TARGET" 2>&1); then
   log "  $output"
