@@ -2,7 +2,9 @@
 
 The runbook for debugging a backend error, end to end. Backend services (bff, db-service,
 espn-service, yahoo-service) forward every **ERROR-level log** to **Sentry**, which emails you
-and groups the error into an issue. (Architecture & deploy model: see `INFRASTRUCTURE.md`.)
+and groups the error into an issue. (Architecture & deploy model:
+[`INFRASTRUCTURE.md`](../INFRASTRUCTURE.md), which lives outside this repo, one level above the
+workspace checkout.)
 
 > Quick links: **Sentry** project `slapstat-backend` · **Coolify** `https://coolify.slapstat.com`
 > · prod API `https://api.slapstat.com` · staging API `https://api.staging.slapstat.com`.
