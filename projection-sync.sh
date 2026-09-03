@@ -23,8 +23,9 @@
 # what the other two write.
 #
 # Installed as /root/projection-sync.sh, run daily by projection-sync.timer. On STAGING today.
-# Production runs projection-service as well (INFRASTRUCTURE.md §10) and needs the same install
-# before the model is switched on there; the earlier claim that prod deliberately had no
+# Production runs projection-service as well (INFRASTRUCTURE.md §10, which now lives outside
+# the repo, one level above the workspace checkout) and needs the same install before the
+# model is switched on there; the earlier claim that prod deliberately had no
 # projection-service was wrong, and is what kept this file staging-only.
 #
 # Failures are reported to Sentry through the same DSN file health-monitor.sh uses. A sync that

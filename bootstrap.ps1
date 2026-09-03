@@ -26,4 +26,4 @@ foreach ($r in $repos) {
 Write-Host ""
 Write-Host "Klart. Aterstar manuellt:"
 Write-Host "  1. Satt env-variablerna for bootRun (DB_PASSWORD, INTERNAL_API_KEY m.fl.)."
-Write-Host "  2. Databaserna nas med psql inne i containern over SSH - se Reaching a database i INFRASTRUCTURE.md."
+Write-Host "  2. Databaserna nas med psql inne i containern over SSH - se Reaching a database i INFRASTRUCTURE.md (en niva upp fran fantasy-katalogen, utanfor repot)."
