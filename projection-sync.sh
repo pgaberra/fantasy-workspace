@@ -91,6 +91,39 @@ target_season() {
   if [ "$((10#$month))" -ge 7 ]; then echo "$year"; else echo "$((year - 1))"; fi
 }
 
+# A deploy replaces the container underneath a running step, and docker kills it with 137. That
+# is not a failure of the work, it is the work being interrupted, and the timer would not try
+# again until tomorrow — so the container is looked up again and the step is retried once. Only
+# 137 is retried: anything else is a real failure and should be reported as one.
+run_step() {
+  local description="$1"
+  shift  # what is left is the command to run *inside* the container
+  local output status
+  log "$description"
+  output=$(docker exec "$CID" "$@" 2>&1)
+  status=$?
+  if [ "$status" -eq 137 ]; then
+    log "  killed mid-step (137) — a deploy most likely; looking the container up again"
+    sleep 30
+    CID="$(container_for "$APP_UUID")"
+    if [ -z "$CID" ]; then
+      log "  FAILED: no container after the retry wait"
+      send_sentry error "projection-sync: ${description} lost its container to a deploy"
+      failed=1
+      return
+    fi
+    output=$(docker exec "$CID" "$@" 2>&1)
+    status=$?
+  fi
+  if [ "$status" -eq 0 ]; then
+    log "  $output"
+  else
+    log "  FAILED: $output"
+    send_sentry error "projection-sync: ${description} failed"
+    failed=1
+  fi
+}
+
 CID="$(container_for "$APP_UUID")"
 if [ -z "$CID" ]; then
   log "no projection-service container matching ${APP_UUID}; nothing to do"
@@ -104,23 +137,9 @@ failed=0
 
 # Rosters first. It is the cheap half and the half that fixes a wrong rookie marker, so it should
 # not be held hostage to the ingest that follows it failing.
-log "projection rosters"
-if output=$(docker exec "$CID" projection rosters 2>&1); then
-  log "  $output"
-else
-  log "  FAILED: $output"
-  send_sentry error "projection-sync: projection rosters failed"
-  failed=1
-fi
+run_step "projection rosters" projection rosters
 
-log "projection ingest --season ${SEASON}"
-if output=$(docker exec "$CID" projection ingest --season "$SEASON" 2>&1); then
-  log "  $output"
-else
-  log "  FAILED: $output"
-  send_sentry error "projection-sync: projection ingest --season ${SEASON} failed"
-  failed=1
-fi
+run_step "projection ingest --season ${SEASON}" projection ingest --season "$SEASON"
 
 # Re-project even if the ingest above failed. The model reads the store rather than the fetch, so
 # the worst case is that it reproduces yesterday's numbers — while skipping it after a failed
@@ -138,13 +157,6 @@ else
   failed=1
 fi
 
-log "projection project --season ${TARGET}"
-if output=$(docker exec "$CID" projection project --season "$TARGET" 2>&1); then
-  log "  $output"
-else
-  log "  FAILED: $output"
-  send_sentry error "projection-sync: projection project --season ${TARGET} failed"
-  failed=1
-fi
+run_step "projection project --season ${TARGET}" projection project --season "$TARGET"
 
 exit "$failed"
