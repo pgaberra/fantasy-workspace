@@ -91,6 +91,36 @@ result=$(run_case gone "137:" "0:Swept 32 rosters")
 IFS='|' read -r _ f a s _ <<< "$result"
 check "reported as failed" 1 "$f"; check "gave up after one attempt" 1 "$a"; check "sentry told" 1 "$s"
 
+echo "== the lines step, whose summary line starts differently =="
+CONTAINER_AFTER_LOOKUP=cid2
+ATTEMPTS=("0:Read 32 clubs, 1237 assignments, 1237 matched to the store")
+: > "$STATE/attempts"; : > "$STATE/args"; : > "$STATE/sentry"
+failed=0; CID=cid1
+run_step lines "Read " projection lines
+check "no failure" 0 "$failed"
+check "one attempt" 1 "$(wc -l < "$STATE/attempts" | tr -d ' ')"
+
+# The gap `run_step`'s own comment names: the markers are strings on both sides and nothing
+# checked that they still agree. A step whose marker no longer matches what the command prints
+# reports a failure on every clean run, which is the same alarm-that-cries-wolf this file exists
+# to avoid — so check them against the CLI that prints them.
+echo "== every marker still matches something the CLI prints =="
+CLI="${PROJECTION_CLI:-$(dirname "$SCRIPT")/fantasy-projection-service/src/projection/cli.py}"
+if [ ! -f "$CLI" ]; then
+  # The service is a separate repo, ignored by this one, so a worktree of the workspace does not
+  # have it. Say so rather than passing quietly.
+  echo "  SKIPPED: no cli.py at $CLI (set PROJECTION_CLI to point at one)"
+else
+  while IFS= read -r marker; do
+    if grep -qF -- "$marker" "$CLI"; then
+      pass=$((pass + 1))
+    else
+      fail=$((fail + 1))
+      echo "  FAIL marker '$marker' appears nowhere in cli.py; the step would fail on a clean run"
+    fi
+  done < <(grep -o 'run_step "[^"]*" "[^"]*"' "$SCRIPT" | sed 's/.*" "//;s/"$//')
+fi
+
 echo
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]
