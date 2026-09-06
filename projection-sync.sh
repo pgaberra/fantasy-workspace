@@ -10,12 +10,19 @@
 #   projection rosters                   who exists — rosters + prospect lists, identity only
 #   projection ingest --season <year>    what they played — MoneyPuck + NHL boxcar
 #   projection injuries                  who is hurt right now — ESPN's report
+#   projection lines                     what role they are expected to play — Daily Faceoff
 #   projection project --season <year>   what we think they will do — the model's own output
 #
 # The injuries step is the one that has to run *often* rather than once. It is a snapshot with no
 # archive, the return dates are a club's guess and they slip, and the projection is only as fresh
 # as the last refresh: a player listed back on 7 November has to stop being deducted once he is
 # back. It runs before the projection because the projection reads it.
+#
+# The lines step is a snapshot too, and for the same reason has to be taken repeatedly: there is
+# no archive of what a club's page said last week, so a day not swept is a day gone. Nothing reads
+# these rows yet — they are a history being accumulated so the signal can one day be fitted rather
+# than asserted, exactly as roster_snapshot is. It reads 32 pages of somebody else's site at one a
+# second, so it is the slowest step here by wall clock and by far the cheapest by work done.
 #
 # The last one is what makes the others visible. The API serves stored projection rows, so
 # data that lands without a re-projection changes nothing a user can see: the store moves and
@@ -169,6 +176,11 @@ run_step "projection ingest --season ${SEASON}" "Ingested seasons" \
 # all, and the model treats a player it knows nothing about as fit, which is what it did before
 # this step existed.
 run_step "projection injuries" "ESPN reports " projection injuries
+
+# Lines after injuries and before the projection. Its failure is not fatal either, and matters
+# less than any other step's: nothing consumes these rows yet, so a missed day costs a day of
+# history and nothing a user can see.
+run_step "projection lines" "Read " projection lines
 
 # Re-project even if the steps above failed. The model reads the store rather than the fetch, so
 # the worst case is that it reproduces yesterday's numbers — while skipping it after a failed
