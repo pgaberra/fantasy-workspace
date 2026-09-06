@@ -91,19 +91,31 @@ target_season() {
   if [ "$((10#$month))" -ge 7 ]; then echo "$year"; else echo "$((year - 1))"; fi
 }
 
-# A deploy replaces the container underneath a running step, and docker kills it with 137. That
-# is not a failure of the work, it is the work being interrupted, and the timer would not try
-# again until tomorrow — so the container is looked up again and the step is retried once. Only
-# 137 is retried: anything else is a real failure and should be reported as one.
+# A deploy replaces the container underneath a running step, and it goes wrong in two ways.
+#
+# The loud one: docker kills the exec with 137. That is not a failure of the work, it is the work
+# being interrupted, and the timer would not try again until tomorrow.
+#
+# The quiet one, and the reason this helper takes a `marker`: if the container is *removed* rather
+# than killed, `docker exec` into it **exits 0 and prints nothing at all**. By exit status that is
+# indistinguishable from a clean run, so the sync logs a success, reports nothing to Sentry, and
+# changes no data — which is precisely the silent no-op this whole file exists to prevent. It has
+# happened: a `projection rosters` pass landed in the middle of a deploy, exited 0, and left the
+# store exactly as it found it.
+#
+# So a step counts as done when it *says* so. Every one of them ends by printing a summary line,
+# and `marker` is the fixed text at the front of it. Anything else - a bad status, or a status of
+# zero with no summary - is treated as the container having gone away: looked up again, retried
+# once, and reported as a failure if the second attempt does not say it worked either.
 run_step() {
-  local description="$1"
-  shift  # what is left is the command to run *inside* the container
+  local description="$1" marker="$2"
+  shift 2  # what is left is the command to run *inside* the container
   local output status
   log "$description"
   output=$(docker exec "$CID" "$@" 2>&1)
   status=$?
-  if [ "$status" -eq 137 ]; then
-    log "  killed mid-step (137) — a deploy most likely; looking the container up again"
+  if ! step_worked "$status" "$output" "$marker"; then
+    log "  no '${marker}' line (status ${status}) — a deploy most likely; looking the container up again"
     sleep 30
     CID="$(container_for "$APP_UUID")"
     if [ -z "$CID" ]; then
@@ -115,13 +127,18 @@ run_step() {
     output=$(docker exec "$CID" "$@" 2>&1)
     status=$?
   fi
-  if [ "$status" -eq 0 ]; then
+  if step_worked "$status" "$output" "$marker"; then
     log "  $output"
   else
-    log "  FAILED: $output"
+    log "  FAILED (status ${status}): ${output:-<no output at all>}"
     send_sentry error "projection-sync: ${description} failed"
     failed=1
   fi
+}
+
+# Exit zero *and* the summary line the command prints when it has done its work.
+step_worked() {
+  [ "$1" -eq 0 ] && printf '%s' "$2" | grep -qF -- "$3"
 }
 
 CID="$(container_for "$APP_UUID")"
@@ -135,28 +152,28 @@ SEASON="$(current_season)"
 TARGET="$(target_season)"
 failed=0
 
+# The second argument of each step is the front of the line that command prints when it has done
+# its work. It is what tells a real run from a `docker exec` into a container that has just been
+# taken out from under it, which exits zero and says nothing. Keep these in step with `cli.py`:
+# they are strings on both sides and nothing checks that they still agree.
+
 # Rosters first. It is the cheap half and the half that fixes a wrong rookie marker, so it should
 # not be held hostage to the ingest that follows it failing.
-run_step "projection rosters" projection rosters
+run_step "projection rosters" "Swept " projection rosters
 
-run_step "projection ingest --season ${SEASON}" projection ingest --season "$SEASON"
+run_step "projection ingest --season ${SEASON}" "Ingested seasons" \
+  projection ingest --season "$SEASON"
 
-# Re-project even if the ingest above failed. The model reads the store rather than the fetch, so
-# the worst case is that it reproduces yesterday's numbers — while skipping it after a failed
-# fetch would strand every earlier day's data behind a stale projection for no gain.
 # Injuries before the projection, because the projection reads them. Its own failure is not
 # fatal to the run: an injury table one day stale is a smaller error than no re-projection at
 # all, and the model treats a player it knows nothing about as fit, which is what it did before
 # this step existed.
-log "projection injuries"
-if output=$(docker exec "$CID" projection injuries 2>&1); then
-  log "  $output"
-else
-  log "  FAILED: $output"
-  send_sentry error "projection-sync: projection injuries failed"
-  failed=1
-fi
+run_step "projection injuries" "ESPN reports " projection injuries
 
-run_step "projection project --season ${TARGET}" projection project --season "$TARGET"
+# Re-project even if the steps above failed. The model reads the store rather than the fetch, so
+# the worst case is that it reproduces yesterday's numbers — while skipping it after a failed
+# fetch would strand every earlier day's data behind a stale projection for no gain.
+run_step "projection project --season ${TARGET}" "Projected " \
+  projection project --season "$TARGET"
 
 exit "$failed"
