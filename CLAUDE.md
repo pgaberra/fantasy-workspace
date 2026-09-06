@@ -154,8 +154,18 @@ Four more rules that follow from the same problem:
   Modified files you don't recognise are someone else's work; leave them alone.
 - **Read the PR before merging** (`gh pr view <n> --json commits,files`). If it contains a
   commit or a file you didn't write, the branch was cut from the wrong base — fix that first.
-- **Run `gh` from inside the sub-repo** (or with `-R owner/repo`) — from the monorepo root it
-  silently resolves the wrong repo.
+- **Run `gh` from inside your own worktree** — not merely inside the sub-repo. `-R owner/repo`
+  fixes which *repo* `gh` talks to, and from the monorepo root you need it or `gh` silently
+  resolves the wrong one. But `gh pr create` also takes the *branch* from the directory you
+  are standing in, and the shared checkout is normally sitting on another agent's in-flight
+  branch. Being "inside fantasy-web" is therefore not enough: run it from your worktree, or
+  pass `--head <your-branch>` explicitly.
+  This is not hypothetical. A `gh pr create` run from the shared `fantasy-web/` opened a PR
+  proposing to merge someone else's `wip/…` branch into `master`, under a title describing an
+  entirely different change — the branch had been pushed correctly from a worktree; only the
+  PR was created from the wrong directory. **Read back what you actually opened**
+  (`gh pr view <n> --json headRefName,baseRefName,commits`) before you trust it; `gh pr close`
+  undoes it cleanly.
 
 A fresh `fantasy-web` worktree needs `npm ci` and `npm run generate:api` before lint/test/build
 will run, since `node_modules` and the generated `src/app/api` are not in git. The Gradle
