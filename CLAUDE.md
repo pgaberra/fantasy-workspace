@@ -198,7 +198,7 @@ Cut the branch from `origin/master` **explicitly**, as above. A bare `git checko
 from whatever HEAD happens to be, and if that's another agent's in-flight branch your PR
 silently carries their commits into `master` alongside yours.
 
-Four more rules that follow from the same problem:
+Five more rules that follow from the same problem:
 
 - **Never `checkout`, `switch`, `stash`, `pull` or `reset` in the shared checkout.** It yanks
   the floor out from under whoever is editing there.
@@ -218,6 +218,13 @@ Four more rules that follow from the same problem:
   PR was created from the wrong directory. **Read back what you actually opened**
   (`gh pr view <n> --json headRefName,baseRefName,commits`) before you trust it; `gh pr close`
   undoes it cleanly.
+- **Never pass `--delete-branch` to `gh pr merge`.** Deleting the branch it just merged means
+  checking out `master` in the directory you are standing in, and the shared checkout is
+  holding `master`, so `gh` stops with `fatal: 'master' is already used by worktree at …` —
+  *after* the merge has already landed on GitHub. The output reads like the merge failed. It
+  did not, and re-running it acts on a PR that is already merged. Merge without the flag,
+  confirm with `gh pr view <n> --json state,mergeCommit`, then clean up yourself:
+  `git worktree remove <path>`, `git branch -D <branch>`, `git push origin --delete <branch>`.
 
 A fresh `fantasy-web` worktree needs `npm ci` and `npm run generate:api` before lint/test/build
 will run, since `node_modules` and the generated `src/app/api` are not in git. The Gradle
