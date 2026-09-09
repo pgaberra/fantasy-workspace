@@ -97,35 +97,6 @@ finding kept back because it "wasn't part of the ticket" is a finding nobody get
 Report it and carry on with the task at hand — don't quietly widen the change to cover it,
 and don't stop and wait for an answer unless the work genuinely can't continue without one.
 
-## Text on the site
-
-This covers copy a user reads in the app: headings, labels, buttons, help text, empty
-states, error and toast messages, tooltips, the privacy page, page titles and meta
-descriptions, wherever it lives — a `fantasy-web` template or a message a backend service
-hands to the frontend.
-
-Em dashes (—) are allowed there, but ration them. The failure mode is overuse: left
-unchecked one turns up in every other sentence, and a screen of that reads as a single
-breathless aside. Two limits keep it honest:
-
-- **None in short copy** — headings, buttons, labels, tooltips, toasts, validation
-  messages. They are too short to need a pause that strong, and a comma, a colon,
-  parentheses or a full stop always fits: "Get started (it's free)", not "Get started —
-  it's free"; "Couldn't save: changes are unsaved", not "Couldn't save — changes are
-  unsaved".
-- **At most one per screen** across the longer prose that is left.
-
-Keep it for what it is actually good at: a sharp aside or reversal mid-sentence, where a
-comma is too weak and parentheses too quiet. "Your subscription is set to cancel — you keep
-premium access until the period ends" earns one. Before writing any other, read the
-sentence back with a comma in its place; if nothing is lost, keep the comma.
-
-An en dash in a numeric range (`3–20 characters`) and a dash standing in for an empty table
-cell are typography, not punctuation, and stay.
-
-Commit messages, PR descriptions, issue comments and code comments are not covered —
-punctuate those however you like.
-
 ## CI / workflow
 
 - Branch → push → PR → checks pass → **squash merge** to `master`.
