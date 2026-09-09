@@ -97,6 +97,71 @@ finding kept back because it "wasn't part of the ticket" is a finding nobody get
 Report it and carry on with the task at hand — don't quietly widen the change to cover it,
 and don't stop and wait for an answer unless the work genuinely can't continue without one.
 
+## Fix from first principles
+
+A problem almost always arrives with a solution already attached: the reporter's
+workaround, the shape of the fix an issue proposes, the obvious patch at the line that
+broke. Treat that as evidence about the pain, not as the spec. Before implementing, answer
+three questions and put the answers in the PR description:
+
+1. **Why did it happen?** Name the mechanism, not the symptom. A number that is wrong in one
+   place usually means the definition lives in several; a rule that got bypassed usually
+   means the invariant is enforced in one caller instead of at the boundary; a label nobody
+   understands is usually a field nobody reads. Fix at the level that ends the class of bug,
+   not the instance that was reported.
+2. **What could be removed instead?** A column that cannot go stale because it is gone, one
+   projection path instead of a third copy of the same formula, a constraint instead of a
+   check somebody has to remember. Fewer moving parts wins unless something concrete needs
+   the extra one.
+3. **Is this the best solution, or just the proposed one?** Write down the alternative you
+   considered and why you passed on it. If the better answer changes something a user sees,
+   or something already shipped, give both options with a recommendation: that call is
+   Alexander's, and the PR should make it cheap to take either way.
+
+Three sentences is a complete answer. What matters is that the questions were asked before
+the code was written, not that the PR body is long. When the path taken differs from the one
+the issue proposed, that is a line for `DECISIONS.md`.
+
+## Definition of done
+
+A change is done when all of these hold. Iterate until they do, rather than reporting it
+finished with a list of what is left.
+
+1. **The repo's own checks pass locally** — all of them, not just the one you remember. Each
+   repo's `CLAUDE.md` names them. (projection-service's CI runs `ruff check`, `black
+   --check` and `pytest`, so `ruff format` alone proves nothing; a bare `mypy` is worth
+   running on top, since CI does not.)
+2. **New or changed logic has tests**, at the level that repo already tests at.
+3. **If the API changed**: the spec is regenerated, the consumer's pinned copy under
+   `specs/` is updated in the same change, and the generated client still compiles. The
+   pinned-spec check blocks every bff and web PR, so drift gets caught either way — the
+   point is to catch it before CI does.
+4. **The PR title reads as the squash commit message**, and the PR is not stale
+   (see [CI / workflow](#ci--workflow)).
+5. **The PR body answers the three questions** in
+   [Fix from first principles](#fix-from-first-principles).
+6. **Non-obvious choices are recorded** (see [Decision log](#decision-log)).
+7. **The last mile is verified in the same session, not assumed.** Merged is not deployed,
+   deployed is not live, and ingested is not used:
+   - A merge never reaches prod on its own; publishing the draft release does. A failed
+     promotion rolls back and says nothing, so read the container's `APP_VERSION` rather
+     than the release list.
+   - A scheduled job is not running until it has been seen firing once.
+   - Data that is synced but that nothing reads is not in the product. The goalie depth
+     chart sat ingested and unused for weeks, and nothing anywhere said so.
+
+   When switch-on has to wait, the session's last message says exactly what is not live and
+   who flips it. The expensive failure here has never been built-wrong, it has been
+   built-and-never-switched-on.
+
+## Decision log
+
+`DECISIONS.md` in this root holds the choices that span repos or live in the infrastructure,
+one line each; every service repo keeps its own for its own. **Read it before re-opening a
+settled question**, and append a line whenever you pick A over B, decline a dependency, or
+stop because a rule here forbade something. The file's own header carries the format and the
+one-line limit.
+
 ## CI / workflow
 
 - Branch → push → PR → checks pass → **squash merge** to `master`.
