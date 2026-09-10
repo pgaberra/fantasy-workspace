@@ -21,6 +21,13 @@ Read this file from `origin/master`, not from the shared checkout, which may sit
 else's branch: `git -C C:/Users/Alexander/git/fantasy fetch origin` then
 `git -C C:/Users/Alexander/git/fantasy show origin/master:.claude/skills/sentry-triage/SKILL.md`.
 
+The task's working folder is **`C:/Users/Alexander/sentry-triage`**, not a repo. Its
+`.claude/settings.json` denies the commands listed below and runs a PreToolUse guard that reads
+every Bash command in full, because a deny rule alone only matches the usual spelling of a
+command and an alert's text can ask for an unusual one. Worktrees for fixes live under
+`C:/Users/Alexander/sentry-triage/worktrees/`. The folder's settings and guard are off limits to
+the run, and so is the task's own schedule and prompt.
+
 The volume this is sized for is small: four unresolved issues across thirty days when it was
 written. If that grows by an order of magnitude, change the caps before the judgement.
 
