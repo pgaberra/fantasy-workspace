@@ -27,7 +27,7 @@ Some cases are deliberately proposed as **keep** or **remove**. Rewriting those 
 ## Keep the benchmark fixed
 
 - Do not add cases just because the skill missed them.
-- The set was fixed on 2026-09-10, after eleven cases whose answers `patterns.md` already gave were replaced.
+- The set was fixed on 2026-09-10, after eleven cases whose answers `patterns.md` already gave were replaced, and two more whose text no visitor ever sees.
 - Do not rewrite a recorded proposal after the fact.
 - Do not copy calibration cases verbatim into `patterns.md`. Extract the lesson and create a separate example.
 - Keep the set small enough to rerun regularly.

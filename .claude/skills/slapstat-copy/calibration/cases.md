@@ -10,30 +10,32 @@ See `README.md` for scoring guidance.
 
 ## Landing and marketing
 
-### 1. Shared projection, call-to-action heading
+### 1. Shared projection gate, heading (N is the number of players in the projection)
 
-`src/app/shared-projection/shared-projection.html:215`
+`src/app/shared-projection/shared-projection.html:191`
 
-> This is one manager's projection
+> This projection includes the top 25 of N players
 
-**Proposed:** keep
+**Proposed:** small edit — *Showing the top 25 of N players*
 
-**Because:** Tells a visitor whose numbers these are before the page asks anything of them.
+**Because:** The projection includes every player. What is limited is what a signed-out visitor can see, and "includes" says the opposite.
 
-**Yours:**  
+**Yours:** ok  
 **Why:**
-### 2. Shared projection, call-to-action body
 
-`src/app/shared-projection/shared-projection.html:217`
+### 2. Shared projection gate, body (X is the author)
 
-> Build your own rankings around your league's scoring settings, or draft directly against this projection.
+`src/app/shared-projection/shared-projection.html:195`
 
-**Proposed:** small edit — *Build your own rankings, or draft against this projection.*
+> Sign in to see the rest of X's rankings and copy the projection into your account. Free to start.
 
-**Because:** "Around your league's scoring settings" is the landing page's claim again, and "directly" adds nothing. The two choices are what a visitor needs here.
+**Proposed:** small edit — *Sign in to see the rest of X's rankings and copy the projection into your account.*
 
-**Yours:**  
+**Because:** "Free to start" repeats the "Create a free account" button beside it.
+
+**Yours:** ok  
 **Why:**
+
 ### 3. Closing heading
 
 `src/app/landing/landing.html:49`
@@ -44,8 +46,9 @@ See `README.md` for scoring guidance.
 
 **Because:** The draft board is Draft mode's own screen. What a reader builds before signing up is a projection and its rankings, and the line below already covers draft day.
 
-**Yours:**  
+**Yours:** ok  
 **Why:**
+
 ### 4. Primary call to action
 
 `src/app/landing/landing.html:24`
@@ -56,8 +59,9 @@ See `README.md` for scoring guidance.
 
 **Because:** A short action plus the one fact that removes hesitation at the click.
 
-**Yours:**  
+**Yours:** ok  
 **Why:**
+
 ### 5. Price note
 
 `src/app/premium/premium.html:68`
@@ -68,8 +72,9 @@ See `README.md` for scoring guidance.
 
 **Because:** The page header already says it is one monthly plan. The second sentence is the one the reader needs when no price is shown.
 
-**Yours:**  
+**Yours:** ok  
 **Why:**
+
 ## Premium
 
 ### 6. Premium perk, title and description
@@ -84,7 +89,7 @@ See `README.md` for scoring guidance.
 
 **Because:** "with our AI model" adds little and repeats the title. A stronger version may depend on what free users get as a starting point, which should be verified before changing the claim.
 
-**Yours:**  
+**Yours:** ok  
 **Why:**
 
 ### 7. Premium perk with no description
@@ -125,8 +130,9 @@ See `README.md` for scoring guidance.
 
 **Because:** `Draft mode` is the feature's name, and "live draft" is on the avoid list. "Rankings" alone reads as player rankings; these rank the teams.
 
-**Yours:**  
+**Yours:** ok  
 **Why:**
+
 ## Empty and error states
 
 ### 10. Empty state for imports
@@ -139,8 +145,9 @@ See `README.md` for scoring guidance.
 
 **Because:** Says what is missing and what to do next, and the field it points to is directly below.
 
-**Yours:**  
+**Yours:** *No imports yet.*  
 **Why:**
+
 ### 11. Invalid reset link, title and message
 
 `src/app/auth/reset-password/reset-password.html:10`
@@ -153,8 +160,9 @@ See `README.md` for scoring guidance.
 
 **Because:** The title names the problem and the link below names the fix. The sentence repeats the title in longer words.
 
-**Yours:**  
+**Yours:** ok  
 **Why:**
+
 ### 12. Payment failure
 
 `src/app/pay/pay.html:5`
@@ -165,7 +173,7 @@ See `README.md` for scoring guidance.
 
 **Because:** The first sentence should name what failed. The second sentence answers the important payment question.
 
-**Yours:**  
+**Yours:** ok  
 **Why:**
 
 ### 13. Verification email failed to send
@@ -178,7 +186,7 @@ See `README.md` for scoring guidance.
 
 **Because:** Avoid telling the reader to retry unless retrying is known to be useful. The nearby action already provides the retry path.
 
-**Yours:**  
+**Yours:** ok  
 **Why:**
 
 ## Banners and notices
@@ -193,7 +201,7 @@ See `README.md` for scoring guidance.
 
 **Because:** It gives the two useful facts and prevents a common support question.
 
-**Yours:**  
+**Yours:** ok  
 **Why:**
 
 ### 15. Starting point method note
@@ -206,8 +214,9 @@ See `README.md` for scoring guidance.
 
 **Because:** The first sentence stacks four method steps. Splitting it keeps every fact. The MoneyPuck credit is required by its terms and stays as written.
 
-**Yours:**  
+**Yours:** *The AI projection uses advanced stats from MoneyPuck. Data © MoneyPuck.com.*  
 **Why:**
+
 ### 16. Checkout loading message
 
 `src/app/pay/pay.html:13`
@@ -218,8 +227,9 @@ See `README.md` for scoring guidance.
 
 **Because:** "This may take a moment" is reassurance the spinner already gives. The instruction is the part that matters.
 
-**Yours:**  
+**Yours:** ok  
 **Why:**
+
 ### 17. Player pool updated
 
 `src/app/shared/player-pool-notice/player-pool-notice.html:13`
@@ -232,7 +242,7 @@ See `README.md` for scoring guidance.
 
 **Because:** The first two sentences answer useful questions. The final sentence tells a fantasy manager to do something they already know to do.
 
-**Yours:**  
+**Yours:** ok  
 **Why:**
 
 ## Dialogs, tooltips and forms
@@ -249,7 +259,7 @@ See `README.md` for scoring guidance.
 
 **Because:** The body should add information rather than repeat the title.
 
-**Yours:**  
+**Yours:** ok  
 **Why:**
 
 ### 19. Help text at a setting
@@ -262,8 +272,9 @@ See `README.md` for scoring guidance.
 
 **Because:** Explains what the settings change, which the fields themselves cannot show. The code confirms it: league size and roster slots set the player pool that values are measured against.
 
-**Yours:**  
+**Yours:** *The Z-Score algorithm uses league size and roster slots to refine your player rankings.*  
 **Why:**
+
 ### 20. Sign-up subtitle
 
 `src/app/auth/register/register.html:3`
@@ -274,12 +285,12 @@ See `README.md` for scoring guidance.
 
 **Because:** "today" adds artificial urgency, and the rest repeats the purpose of the page. The form does not need a marketing sentence here.
 
-**Yours:**  
+**Yours:** ok  
 **Why:**
 
 ---
 
 ## Benchmark notes
 
-- Cases **1, 4, 7, 8, 10, 11, 14, 19 and 20** deliberately test whether the skill can keep good copy or remove unnecessary copy instead of rewriting it.
+- Cases **4, 7, 8, 10, 11, 14, 19 and 20** deliberately test whether the skill can keep good copy or remove unnecessary copy instead of rewriting it.
 - Case **6** deliberately tests whether the skill asks for a missing product fact instead of inventing one.
