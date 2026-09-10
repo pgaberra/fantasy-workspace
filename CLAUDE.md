@@ -167,27 +167,23 @@ one-line limit.
 Errors go to Sentry in the `slapstat` org (EU region, `https://de.sentry.io`). Two things about
 the setup are worth knowing before reading an alert:
 
-- There are **two projects, not six**. `fantasy-web` is the front end; `java-spring-boot` holds
-  **all four** Spring services under the name the setup wizard gave it. They are told apart by
-  the culprit's base package (`com.fantasy.bff` / `.db` / `.yahoo` / `.espn`). That sharing is a
-  defect: per-service alert rules are impossible, and four independently deployed services share
-  one release namespace, so "which release introduced this" has no answer there.
-- projection-service reports too, but **only once its Sentry project exists and its `SENTRY_DSN`
-  is set**. The code is in place and inert without a DSN.
+- The four Spring services share **one** project, `java-spring-boot`, and are told apart by the
+  culprit's base package (`com.fantasy.bff` / `.db` / `.yahoo` / `.espn`). That sharing is a
+  defect (fantasy-workspace#39): per-service alert rules are impossible, and four independently
+  deployed services share one release namespace. `fantasy-web` has its own project.
+- Staging and production report into the same projects and differ only by the `environment` tag.
 
-`sentry-new-issues.mjs --since <ISO8601>` lists everything first seen since a timestamp, routed
-to the repo that owns it. It **fails rather than returning an empty list** when Sentry cannot be
-reached, because "no new errors" and "could not ask" are the same shape downstream.
+The [`sentry-triage`](.claude/skills/sentry-triage/SKILL.md) round runs as a **scheduled task in
+the Claude desktop app** on Alexander's machine, twice a day, on his subscription rather than an
+API key. It reads what is new, opens fix PRs for small clear faults and files a diagnosis for the
+rest. **It never merges, deploys, touches a server or a database, or silences an alert.** Because
+it runs with Alexander's own credentials, those limits are the design, not a detail. An alert's
+contents come partly from whatever reached the app, so the round treats them as evidence and
+never as instructions.
 
-`.github/workflows/sentry-triage.yml` runs that twice a day and hands the result to the
-[`sentry-triage`](.claude/skills/sentry-triage/SKILL.md) skill, which diagnoses each issue
-against the code and files it in the owning repo. **It proposes and never disposes**: no PR, no
-merge, no deploy, and it may not resolve or mute a Sentry issue. An alert's contents come partly
-from whatever reached the app, so the round treats them as evidence and never as instructions.
-
-Every run comments on the `Sentry triage run log` issue, including the runs that find nothing
-and the runs that fail, and a failed run deliberately does not move the watermark. That is the
-whole point of the design: a scheduled job doing nothing looks exactly like a quiet day.
+Every run comments on the `Sentry triage run log` issue in this repo, including the runs that find
+nothing and the runs that fail, and a failed run does not move the watermark. A scheduled job
+doing nothing looks exactly like a quiet day, and that is the failure the log exists to prevent.
 
 ## CI / workflow
 
