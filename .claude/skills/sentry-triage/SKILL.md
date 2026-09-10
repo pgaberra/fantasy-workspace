@@ -19,7 +19,9 @@ fingerprints in the issues and PRs themselves.
 
 Read this file from `origin/master`, not from the shared checkout, which may sit on someone
 else's branch: `git -C C:/Users/Alexander/git/fantasy fetch origin` then
-`git -C C:/Users/Alexander/git/fantasy show origin/master:.claude/skills/sentry-triage/SKILL.md`.
+`MSYS_NO_PATHCONV=1 git -C C:/Users/Alexander/git/fantasy show origin/master:.claude/skills/sentry-triage/SKILL.md`.
+The `MSYS_NO_PATHCONV=1` prefix is required on every `git show <ref>:<path>`: without it Git Bash
+rewrites the path argument as a Windows path and the command fails.
 
 The task's working folder is **`C:/Users/Alexander/sentry-triage`**, not a repo. Its
 `.claude/settings.json` denies the commands listed below and runs a PreToolUse guard that reads
