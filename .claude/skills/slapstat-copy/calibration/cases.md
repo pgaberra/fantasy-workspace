@@ -20,8 +20,8 @@ See `README.md` for scoring guidance.
 
 **Because:** The projection includes every player. What is limited is what a signed-out visitor can see, and "includes" says the opposite.
 
-**Yours:** ok  
-**Why:**
+**Yours:** *The top 25 of N players*  
+**Why:** "Showing" would repeat the table footer's "Showing 50 of 100" in the same view, with a different number.
 
 ### 2. Shared projection gate, body (X is the author)
 
