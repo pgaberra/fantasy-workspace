@@ -214,7 +214,7 @@ See `README.md` for scoring guidance.
 
 **Because:** The first sentence stacks four method steps. Splitting it keeps every fact. The MoneyPuck credit is required by its terms and stays as written.
 
-**Yours:** *The AI projection uses advanced stats from MoneyPuck.com.*  
+**Yours:** *The AI projection uses advanced stats from MoneyPuck. Data © MoneyPuck.com.*  
 **Why:**
 
 ### 16. Checkout loading message
@@ -272,7 +272,7 @@ See `README.md` for scoring guidance.
 
 **Because:** Explains what the settings change, which the fields themselves cannot show. The code confirms it: league size and roster slots set the player pool that values are measured against.
 
-**Yours:** *Our Z-Score algorithm uses league size and roster slots to refine your player rankings.*  
+**Yours:** *The Z-Score algorithm uses league size and roster slots to refine your player rankings.*  
 **Why:**
 
 ### 20. Sign-up subtitle
