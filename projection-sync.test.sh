@@ -101,19 +101,30 @@ check "no failure" 0 "$failed"
 check "one attempt" 1 "$(wc -l < "$STATE/attempts" | tr -d ' ')"
 
 # The gate in front of the in-season steps, with the script's own `current_season`,
-# `target_season` and `in_season` and a stubbed clock. July to September must stay the run it was.
-echo "== in season is October to June, and never July to September =="
+# `target_season` and `in_season`, a stubbed clock and a stubbed answer from the service. The season
+# underway is the NHL's: 30 September 2026 is in 2026-27, where the old October rule said 2025-26.
+echo "== in season runs from the morning after opening night to June =="
 SEASON_HELPERS=$(mktemp)
 sed -n '/^current_season()/,/^}/p;/^target_season()/,/^}/p;/^in_season()/,/^}/p' "$SCRIPT" \
   > "$SEASON_HELPERS"
 . "$SEASON_HELPERS"
 date() { case "$*" in *%Y*) echo "$FAKE_YEAR" ;; *%m*) echo "$FAKE_MONTH" ;; esac; }
-for when in "2026 07 no" "2026 09 no" "2026 10 yes" "2026 12 yes" "2027 01 yes" "2027 06 yes"; do
-  read -r FAKE_YEAR FAKE_MONTH expected <<< "$when"
+docker() { [ -z "$UNDERWAY" ] || printf 'Season underway: %s, opened 2026-09-29\n' "$UNDERWAY"; }
+# year month what-the-service-says expected ("-" is no answer at all)
+for when in "2026 09 2025 no" "2026 09 2026 yes" "2026 10 2026 yes" "2027 06 2026 yes" \
+  "2027 07 2026 no" "2026 10 - yes" "2026 09 - no"; do
+  read -r FAKE_YEAR FAKE_MONTH UNDERWAY expected <<< "$when"
+  [ "$UNDERWAY" = - ] && UNDERWAY=""
+  : > "$STATE/sentry"
+  SEASON=$(current_season 2>/dev/null); TARGET=$(target_season)
   if in_season; then got=yes; else got=no; fi
-  check "in season in ${FAKE_YEAR}-${FAKE_MONTH}" "$expected" "$got"
+  check "in season on ${FAKE_YEAR}-${FAKE_MONTH}, service says '${UNDERWAY}'" "$expected" "$got"
+  if [ -z "$UNDERWAY" ]; then
+    check "a guessed season is reported on ${FAKE_YEAR}-${FAKE_MONTH}" 1 \
+      "$(wc -l < "$STATE/sentry" | tr -d ' ')"
+  fi
 done
-unset -f date
+unset -f date docker
 
 echo "== the in-season steps sit behind the gate =="
 gated=$(sed -n '/^if in_season; then/,/^fi/p' "$SCRIPT")
@@ -144,6 +155,13 @@ else
       echo "  FAIL marker '$marker' appears nowhere in cli.py; the step would fail on a clean run"
     fi
   done < <(grep -o 'run_step "[^"]*" "[^"]*"' "$SCRIPT" | sed 's/.*" "//;s/"$//')
+  # Not a step, but read the same way: the season is taken off this line's front.
+  if grep -qF -- 'Season underway: ' "$CLI"; then
+    pass=$((pass + 1))
+  else
+    fail=$((fail + 1))
+    echo "  FAIL 'Season underway: ' appears nowhere in cli.py; every night would guess the season"
+  fi
 fi
 
 echo

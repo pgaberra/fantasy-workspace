@@ -20,12 +20,12 @@
 # as the last refresh: a player listed back on 7 November has to stop being deducted once he is
 # back. It runs before the projection because the projection reads it.
 #
-# The game logs and the schedule run only in season, October to June, when the season with games
-# in it is the season being projected. Until they ran, the store's newest calendar in season was
+# The game logs and the schedule run only in season, from the morning after opening night to the
+# end of June, when the season with games in it is the season being projected. Until they ran, the store's newest calendar in season was
 # last season's game logs moved forward a year: a 2026-27 return date was counted against
 # 2025-26's three-week Olympic break, and Who's hot had no games at all for the season underway.
 # A return date is counted on the schedule and not on the logs, because the logs stop at last
-# night. Out of season neither runs, so July to September is the run it was before they existed.
+# night. Out of season neither runs, so the summer is the run it was before they existed.
 #
 # The lines step is a snapshot too, and for the same reason has to be taken repeatedly: there is
 # no archive of what a club's page said last week, so a day not swept is a day gone. The model reads
@@ -84,12 +84,22 @@ send_sentry() { # level message
     --data "{\"message\":\"${msg}\",\"level\":\"${level}\",\"platform\":\"other\",\"environment\":\"${ENV_NAME}\",\"server_name\":\"$(hostname)\",\"logger\":\"projection-sync\",\"tags\":{\"monitor\":\"ingestion\"}}"
 }
 
-# The season with games in it, as a start year. The NHL season opens in October, so from October
-# that is this calendar year and before it the one before. Asking MoneyPuck for a season that has
-# not been played yet returns nothing useful and would only ever fail, so the cutover is the
-# opening month rather than the summer.
+# The season with games in it, as a start year: the newest season whose opening night has passed,
+# by the NHL's own published dates (`projection season-underway`). It used to be a calendar rule,
+# October on, and seasons do not open by the calendar: 2026-27 opens on 29 September, so its first
+# two nights were read as the season before. Asking MoneyPuck for a season with no games in it
+# returns nothing useful, which is why the cutover is opening night and not the summer.
+#
+# If the service cannot say (the NHL is down, or the container predates the command), the October
+# rule stands in, with a warning to the journal and to Sentry: a sync that ran on a guessed season
+# must not look like one that knew.
 current_season() {
-  local year month
+  local answer year month
+  answer=$(docker exec "$CID" projection season-underway 2>/dev/null \
+    | sed -n 's/^Season underway: \([0-9][0-9][0-9][0-9]\),.*/\1/p')
+  if [ -n "$answer" ]; then echo "$answer"; return 0; fi
+  log "WARNING: projection season-underway gave no answer; taking October as opening night" >&2
+  send_sentry warning "projection-sync: could not read which season is underway; used the October rule"
   year=$(date -u +%Y); month=$(date -u +%m)
   if [ "$((10#$month))" -ge 10 ]; then echo "$year"; else echo "$((year - 1))"; fi
 }
@@ -108,10 +118,11 @@ target_season() {
   if [ "$((10#$month))" -ge 7 ]; then echo "$year"; else echo "$((year - 1))"; fi
 }
 
-# In season: the season with games in it is the season being projected, which is October to June.
-# The steps that read the season underway run only then; see the top of this file.
+# In season: the season with games in it is the season being projected, which runs from the
+# morning after opening night to the end of June. The steps that read the season underway run only
+# then; see the top of this file. Reads SEASON and TARGET, so the NHL is asked once a night.
 in_season() {
-  [ "$(current_season)" = "$(target_season)" ]
+  [ "$SEASON" = "$TARGET" ]
 }
 
 # A deploy replaces the container underneath a running step, and it goes wrong in two ways.
