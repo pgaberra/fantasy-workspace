@@ -1,0 +1,18 @@
+# Installed on every server that runs projection-service as
+# /etc/systemd/system/projection-sync-retry.service; the same file on staging and in production.
+# Pairs with projection-sync-retry.timer. Runs the sync a second time in the afternoon, and does
+# anything only when that day's morning run failed; what still fails then goes to Sentry. See
+# `plan_attempt` in projection-sync.sh, and projection-sync-setup.md for the install.
+[Unit]
+Description=SlapStat projection store sync, afternoon retry of a failed morning run
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/root/projection-sync.sh --retry
+# /var/lib/projection-sync, where the morning run left its outcome. Shared with the nightly unit.
+StateDirectory=projection-sync
+# The same cap as the nightly unit, for the same reason: a retry that has something to do is the
+# whole sync again.
+TimeoutStartSec=90min

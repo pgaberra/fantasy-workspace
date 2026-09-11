@@ -1,15 +1,18 @@
 # Installed on every server that runs projection-service as
 # /etc/systemd/system/projection-sync.service; the same file on staging and in production.
-# Pairs with projection-sync.timer; see projection-sync.sh for what it does and why, and
+# Pairs with projection-sync.timer, and projection-sync-retry.service runs it again in the
+# afternoon when this run failed; see projection-sync.sh for what it does and why, and
 # projection-sync-setup.md for the install.
 [Unit]
-Description=SlapStat projection store sync (rosters, season stats, injuries, lines, re-projection)
+Description=SlapStat projection store sync (rosters, season stats, game logs, schedule, injuries, lines, re-projection)
 After=docker.service
 Requires=docker.service
 
 [Service]
 Type=oneshot
 ExecStart=/root/projection-sync.sh
+# /var/lib/projection-sync, where the run leaves its outcome for the afternoon retry to read.
+StateDirectory=projection-sync
 # The fetch steps make a few thousand polite calls to the NHL, MoneyPuck, ESPN and Daily Faceoff
 # between them, so the run is long by a timer's standards; the re-projection that follows is pure
 # local computation and adds little. The cap is there to stop a hung upstream holding the unit

@@ -1,0 +1,18 @@
+# Installed on every server that runs projection-service as
+# /etc/systemd/system/projection-sync-retry.timer; the same file on staging and in production.
+#
+# 16:30 UTC, twelve hours after the nightly run: late enough for a source that was not ready at
+# dawn (MoneyPuck's file for a season that opened the evening before), early enough to be the same
+# UTC day, which is what the retry checks before it does anything. Persistent catches up a retry
+# missed while the box was down; one that lands on the next day finds nothing to retry, and the
+# next nightly run then reports the failure nobody retried.
+[Unit]
+Description=Retry the SlapStat projection ingestion if the morning run failed
+
+[Timer]
+OnCalendar=*-*-* 16:30:00 UTC
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

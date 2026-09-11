@@ -14,9 +14,12 @@ SCRIPT="${1:-$(dirname "$0")/projection-sync.sh}"
 
 # Lift the helpers out; the file's top level runs a real sync and cannot be sourced.
 HELPERS=$(mktemp)
-sed -n '/^run_step()/,/^}/p;/^step_worked()/,/^}/p;/^projection_services()/,/^}/p;/^container_for()/,/^}/p' \
+sed -n '/^run_step()/,/^}/p;/^step_worked()/,/^}/p;/^projection_services()/,/^}/p;/^container_for()/,/^}/p;/^report_failure()/,/^}/p;/^plan_attempt()/,/^}/p;/^record_run()/,/^}/p' \
   "$SCRIPT" > "$HELPERS"
 . "$HELPERS"
+# The step cases below are the retry's: a failure there is one nobody will try again, so it is
+# reported. The morning's quiet first attempt has cases of its own further down.
+ATTEMPT=2
 SERVICE_SUFFIX="$(sed -n 's/^SERVICE_SUFFIX=//p' "$SCRIPT")"
 
 # `run_step` calls docker inside a command substitution, so a stub that counts in a variable
@@ -210,14 +213,65 @@ for when in "2026 09 2025 no" "2026 09 2026 yes" "2026 10 2026 yes" "2027 06 202
 done
 unset -f date docker
 
-echo "== the in-season steps sit behind the gate =="
+echo "== the game logs sit behind the gate, and the schedule runs every night =="
 gated=$(sed -n '/^if in_season; then/,/^fi/p' "$SCRIPT")
-for step in "projection game-logs" "projection schedule"; do
-  if printf '%s' "$gated" | grep -qF -- "run_step \"$step"; then
-    pass=$((pass + 1))
-  else
-    fail=$((fail + 1)); echo "  FAIL '$step' does not run behind in_season"
-  fi
+if printf '%s' "$gated" | grep -qF -- 'run_step "projection game-logs'; then
+  pass=$((pass + 1))
+else
+  fail=$((fail + 1)); echo "  FAIL the game logs do not run behind in_season"
+fi
+if printf '%s' "$gated" | grep -qF -- 'run_step "projection schedule'; then
+  fail=$((fail + 1)); echo "  FAIL the schedule runs only in season; it has to run every night"
+elif grep -qF -- 'run_step "projection schedule' "$SCRIPT"; then
+  pass=$((pass + 1))
+else
+  fail=$((fail + 1)); echo "  FAIL the schedule step is gone"
+fi
+
+# The retry, with the script's own `plan_attempt`, `report_failure` and `record_run`, a state file
+# of the test's own and a stubbed clock.
+echo "== a failed morning is retried once in the afternoon, and only then reported =="
+PROJECTION_SYNC_STATE="$STATE/last-run"
+STATE_FILE="$PROJECTION_SYNC_STATE"
+date() { case "$*" in *%F*) echo "$FAKE_DAY" ;; *) command date "$@" ;; esac; }
+FAKE_DAY=2026-09-30
+plan() { # state-line-or-dash mode -> "attempt|sentry-count"
+  : > "$STATE/sentry"
+  if [ "$1" = - ]; then rm -f "$STATE_FILE"; else echo "$1" > "$STATE_FILE"; fi
+  echo "$(plan_attempt "$2")|$(wc -l < "$STATE/sentry" | tr -d ' ')"
+}
+check "a first run ever is attempt 1" "1|0" "$(plan - run)"
+check "the morning after a good day is attempt 1" "1|0" "$(plan '2026-09-29 1 ok' run)"
+check "a retry after a failed morning is attempt 2" "2|0" "$(plan '2026-09-30 1 failed' retry)"
+check "a retry after a good morning has nothing to do" "|0" "$(plan '2026-09-30 1 ok' retry)"
+check "a retry never makes a third attempt" "|0" "$(plan '2026-09-30 2 failed' retry)"
+check "a retry does not pick up yesterday's failure" "|0" "$(plan '2026-09-29 1 failed' retry)"
+check "a failure nobody retried is reported by the next run" "1|1" "$(plan '2026-09-29 1 failed' run)"
+check "a failure the retry already reported is not reported twice" "1|0" \
+  "$(plan '2026-09-29 2 failed' run)"
+
+ATTEMPT=1; : > "$STATE/sentry"
+report_failure "projection-sync: projection ingest --season 2026 failed"
+check "a first attempt's failure stays out of Sentry" 0 "$(wc -l < "$STATE/sentry" | tr -d ' ')"
+record_run failed
+check "and is written down for the retry" "2026-09-30 1 failed" "$(cat "$STATE_FILE")"
+
+ATTEMPT=2; : > "$STATE/sentry"
+report_failure "projection-sync: projection ingest --season 2026 failed"
+check "the retry's failure goes to Sentry" 1 "$(wc -l < "$STATE/sentry" | tr -d ' ')"
+record_run ok
+check "and a good retry is written down as the day's outcome" "2026-09-30 2 ok" "$(cat "$STATE_FILE")"
+unset -f date
+
+echo "== the afternoon timer runs the retry =="
+DIR="$(dirname "$SCRIPT")"
+check "the retry service passes --retry" 1 \
+  "$(grep -c '^ExecStart=/root/projection-sync.sh --retry$' "$DIR/projection-sync-retry.service")"
+check "the retry timer fires at 16:30 UTC" 1 \
+  "$(grep -c '^OnCalendar=\*-\*-\* 16:30:00 UTC$' "$DIR/projection-sync-retry.timer")"
+for unit in projection-sync.service projection-sync-retry.service; do
+  check "$unit keeps its state where the script looks" 1 \
+    "$(grep -c '^StateDirectory=projection-sync$' "$DIR/$unit")"
 done
 
 # The gap `run_step`'s own comment names: the markers are strings on both sides and nothing
