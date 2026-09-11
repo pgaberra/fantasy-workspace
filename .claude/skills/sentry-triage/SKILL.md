@@ -47,8 +47,8 @@ databases and every repo. That is far more than the job needs, so the limits bel
 | Label `sentry:triage` and `needs-human` | Change any Claude, git, GitHub or Coolify setting, permission or secret |
 
 **Why each hard line exists.** A merge here never reaches prod on its own, and that gate is
-deliberate. A failed promotion rolls back silently, so an unattended deploy can leave prod stale
-with nobody knowing. And a server or database command started by something that just read an
+deliberate. A failed promotion rolls back to the old container, so an unattended deploy can leave prod
+stale while the release list says otherwise. And a server or database command started by something that just read an
 error report is how an error report becomes an incident.
 
 "Stop it alarming" has two implementations that look identical from outside: fix what reports
