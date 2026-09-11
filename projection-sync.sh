@@ -28,37 +28,49 @@
 # The last one is what makes the others visible. The API serves stored projection rows, so
 # data that lands without a re-projection changes nothing a user can see: the store moves and
 # the numbers on screen stay where the last hand-run left them. It goes last because it reads
-# what the other two write.
+# what every step before it writes.
 #
-# Installed as /root/projection-sync.sh, run daily by projection-sync.timer. On STAGING today.
-# Production runs projection-service as well (INFRASTRUCTURE.md §10, which now lives outside
-# the repo, one level above the workspace checkout) and needs the same install before the
-# model is switched on there; the earlier claim that prod deliberately had no
-# projection-service was wrong, and is what kept this file staging-only.
+# Installed as /root/projection-sync.sh on every server that runs projection-service, and run
+# daily there by projection-sync.timer. It is the same file on staging and in production, with
+# no per-host edit: it finds its container itself (below). Where it is installed, and how to
+# install it, is projection-sync-setup.md.
 #
 # Failures are reported to Sentry through the same DSN file health-monitor.sh uses. A sync that
 # fails quietly is the whole problem this guards against: nothing breaks, no page errors, the
 # rookie markers just gently stop being true.
+#
+#   projection-sync.sh                    run the sync
+#   projection-sync.sh --find-container   print the service and container it would use, run nothing
 set -uo pipefail
 
-# Coolify application UUID for staging's fantasy-projection-service, matched as a container-name
-# prefix so it survives redeploys. Same value as the projection-service row in
-# health-monitor.staging.conf; keep the two in step.
-APP_UUID=ipxsgd6mzpekvwsny4zabc73
+# Coolify stamps every application container with the app's name as `coolify.serviceName`:
+# `staging-projection-service` on staging, `prod-projection-service` in production. Matching the
+# suffix is what lets one file serve both. This used to be staging's application UUID, written
+# into the script with a note to keep it in step with health-monitor.staging.conf by hand, which
+# made the file wrong on every other host by construction.
+SERVICE_SUFFIX=-projection-service
 
 DSN_FILE=/root/.health-dsn
 ENV_NAME="$(cat /root/.health-env 2>/dev/null || echo unknown)"
 
 log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"; }
 
-# During a rolling update two containers share the prefix: the old one still serving and the new
-# one still booting. Prefer the one Docker calls healthy, exactly as health-monitor.sh does —
-# running a sync inside a container that is about to be discarded would throw the work away.
-container_for() { # name-prefix -> container id
+# The distinct Coolify service names on this host that end in the suffix, one per line. More than
+# one is refused rather than guessed between: a second app named like this one (a copy, a preview
+# environment) is somebody's deliberate change, and syncing the wrong store would look like a
+# success.
+projection_services() {
+  docker ps --format '{{.Label "coolify.serviceName"}}' | grep -e "${SERVICE_SUFFIX}\$" | sort -u
+}
+
+# During a rolling update two containers carry the same service name: the old one still serving
+# and the new one still booting. Prefer the one Docker calls healthy, exactly as health-monitor.sh
+# does — running a sync inside a container that is about to be discarded would throw the work away.
+container_for() { # coolify service name -> container id
   local cid
-  cid=$(docker ps -q --filter "name=^$1" --filter "health=healthy" | head -1)
+  cid=$(docker ps -q --filter "label=coolify.serviceName=$1" --filter "health=healthy" | head -1)
   [ -n "$cid" ] && { echo "$cid"; return 0; }
-  docker ps -q --filter "name=^$1" | head -1
+  docker ps -q --filter "label=coolify.serviceName=$1" | head -1
 }
 
 send_sentry() { # level message
@@ -125,7 +137,7 @@ run_step() {
   if ! step_worked "$status" "$output" "$marker"; then
     log "  no '${marker}' line (status ${status}) — a deploy most likely; looking the container up again"
     sleep 30
-    CID="$(container_for "$APP_UUID")"
+    CID="$(container_for "$SERVICE")"
     if [ -z "$CID" ]; then
       log "  FAILED: no container after the retry wait"
       send_sentry error "projection-sync: ${description} lost its container to a deploy"
@@ -149,11 +161,40 @@ step_worked() {
   [ "$1" -eq 0 ] && printf '%s' "$2" | grep -qF -- "$3"
 }
 
-CID="$(container_for "$APP_UUID")"
+FIND_ONLY=0
+if [ "${1:-}" = "--find-container" ]; then
+  FIND_ONLY=1
+  send_sentry() { :; }  # somebody is at the terminal reading the answer
+fi
+
+# Without the DSN file every failure below reaches the journal and nothing else. health-monitor.sh
+# falls back to a DSN scavenged from a container; this does not, so say so on every run.
+[ -s "$DSN_FILE" ] || log "WARNING: no ${DSN_FILE}; failures will not reach Sentry"
+
+SERVICES="$(projection_services)"
+case "$(printf '%s' "$SERVICES" | grep -c .)" in
+  0)
+    log "no running container has a Coolify service name ending in ${SERVICE_SUFFIX}; nothing to do"
+    send_sentry error "projection-sync: no projection-service container found"
+    exit 1 ;;
+  1)
+    SERVICE="$SERVICES" ;;
+  *)
+    log "more than one Coolify service ends in ${SERVICE_SUFFIX} ($(echo $SERVICES)); refusing to guess"
+    send_sentry error "projection-sync: more than one projection-service on this host"
+    exit 1 ;;
+esac
+
+CID="$(container_for "$SERVICE")"
 if [ -z "$CID" ]; then
-  log "no projection-service container matching ${APP_UUID}; nothing to do"
+  log "${SERVICE} has no running container; nothing to do"
   send_sentry error "projection-sync: no projection-service container found"
   exit 1
+fi
+
+if [ "$FIND_ONLY" = 1 ]; then
+  echo "$SERVICE $CID"
+  exit 0
 fi
 
 SEASON="$(current_season)"
