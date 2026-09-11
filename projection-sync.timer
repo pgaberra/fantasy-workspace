@@ -1,9 +1,12 @@
-# Installed on the STAGING server as /etc/systemd/system/projection-sync.timer.
+# Installed on every server that runs projection-service as
+# /etc/systemd/system/projection-sync.timer; the same file on staging and in production.
 #
 # Daily, before the ESPN player pool syncs at 07:45 UTC, so the two sides of the id match are
-# never more than a few hours out of step with each other. Persistent catches up a run missed
-# while the box was down — a skipped day would otherwise leave the store silently stale until
-# somebody noticed a wrong rookie marker.
+# never more than a few hours out of step with each other. That ordering is staging's reason:
+# production takes its player pool from yahoo-service rather than ESPN (INFRASTRUCTURE.md §9), so
+# there the time is simply inherited. Persistent catches up a run missed while the box was down —
+# a skipped day would otherwise leave the store silently stale until somebody noticed a wrong
+# rookie marker.
 [Unit]
 Description=Run the SlapStat projection ingestion daily
 

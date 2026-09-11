@@ -1,32 +1,66 @@
 #!/usr/bin/env bash
-# Exercise `run_step` against a stubbed docker, since the real thing only misbehaves when a
-# deploy lands on top of it - which is not a thing you can arrange to watch.
+# Exercise `run_step` and the container lookup against a stubbed docker, since the real thing only
+# misbehaves when a deploy lands on top of it - which is not a thing you can arrange to watch.
 #
-#   ./projection-sync.test.sh
+#   PROJECTION_CLI=<fantasy-projection-service>/src/projection/cli.py ./projection-sync.test.sh
 #
-# Nothing runs this for you: the repo has no CI. Run it by hand after touching `run_step`, which
+# Nothing runs this for you: the repo has no CI. Run it by hand after touching the script. `run_step`
 # has now been got wrong twice - once by rewriting the command's own arguments, and once by
-# trusting an exit status that a removed container hands back as zero.
+# trusting an exit status that a removed container hands back as zero. Without PROJECTION_CLI the
+# marker check at the end is skipped (it says so), because a worktree has no service checkout.
 set -uo pipefail
 
 SCRIPT="${1:-$(dirname "$0")/projection-sync.sh}"
 
 # Lift the helpers out; the file's top level runs a real sync and cannot be sourced.
-sed -n '/^run_step()/,/^}/p;/^step_worked()/,/^}/p' "$SCRIPT" > /tmp/helpers.sh
-. /tmp/helpers.sh
+HELPERS=$(mktemp)
+sed -n '/^run_step()/,/^}/p;/^step_worked()/,/^}/p;/^projection_services()/,/^}/p;/^container_for()/,/^}/p' \
+  "$SCRIPT" > "$HELPERS"
+. "$HELPERS"
+SERVICE_SUFFIX="$(sed -n 's/^SERVICE_SUFFIX=//p' "$SCRIPT")"
 
 # `run_step` calls docker inside a command substitution, so a stub that counts in a variable
 # counts in a subshell and loses it. Everything the stub records goes to a file instead.
 STATE=$(mktemp -d)
 log() { :; }
 send_sentry() { echo x >> "$STATE/sentry"; }
-container_for() { echo "$CONTAINER_AFTER_LOOKUP"; }
-APP_UUID=stub
-CONTAINER_AFTER_LOOKUP=cid2
 sleep() { :; }   # no real waiting in a test
 
-# The stub records what it was asked to run, and answers from a queue of scripted attempts.
+# `docker ps` answers from CONTAINERS, one "id service-name health" row per running container
+# ("-" for a container Coolify did not label). It honours exactly the filters and formats the
+# script uses, so a lookup that asks for something else gets nothing back and fails its check.
+docker_ps() {
+  local label="" healthy=0 fmt="" id name health
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --filter)
+        case "$2" in
+          label=coolify.serviceName=*) label="${2#label=coolify.serviceName=}" ;;
+          health=healthy) healthy=1 ;;
+          *) return 1 ;;
+        esac
+        shift 2 ;;
+      --format) fmt="$2"; shift 2 ;;
+      -q) fmt='{{.ID}}'; shift ;;
+      *) return 1 ;;
+    esac
+  done
+  while read -r id name health; do
+    [ -z "$id" ] && continue
+    [ "$name" = "-" ] && name=""
+    [ -n "$label" ] && [ "$name" != "$label" ] && continue
+    [ "$healthy" = 1 ] && [ "$health" != healthy ] && continue
+    case "$fmt" in
+      '{{.ID}}') echo "$id" ;;
+      '{{.Label "coolify.serviceName"}}') echo "$name" ;;
+      *) return 1 ;;
+    esac
+  done <<< "$CONTAINERS"
+}
+
+# `docker exec` records what it was asked to run, and answers from a queue of scripted attempts.
 docker() {
+  if [ "$1" = ps ]; then shift; docker_ps "$@"; return; fi
   shift 2  # "exec" and the container id
   echo "$*" > "$STATE/args"
   echo x >> "$STATE/attempts"
@@ -43,6 +77,56 @@ check() { # name expected actual
     fail=$((fail + 1)); echo "  FAIL $1: expected '$2', got '$3'"
   fi
 }
+
+# The lookup, with the real `projection_services` and `container_for`. The service names are the
+# ones Coolify gives each host's app; the neighbours are there to be ignored.
+echo "== staging: the service is found by its own name, and a deploy's healthy container wins =="
+CONTAINERS="c-bff staging-bff healthy
+c-pg staging-projection-postgres healthy
+c-new staging-projection-service starting
+c-old staging-projection-service healthy
+c-coolify - healthy"
+check "one service" "staging-projection-service" "$(projection_services)"
+check "the healthy one of two" "c-old" "$(container_for staging-projection-service)"
+
+echo "== production: the same file finds prod's name =="
+CONTAINERS="c-web prod-web healthy
+c-proj prod-projection-service healthy
+c-projdb prod-projection-postgres healthy"
+check "one service" "prod-projection-service" "$(projection_services)"
+check "its container" "c-proj" "$(container_for prod-projection-service)"
+
+echo "== mid-deploy with nothing healthy yet: fall back to the one that is there =="
+CONTAINERS="c-boot prod-projection-service starting"
+check "the only container" "c-boot" "$(container_for prod-projection-service)"
+
+echo "== not a suffix match: a name that merely contains it is ignored =="
+CONTAINERS="c-x prod-projection-service-old healthy
+c-y - healthy"
+check "no service" "" "$(projection_services)"
+
+echo "== two apps named like it: both are reported, so the script can refuse =="
+CONTAINERS="c-a prod-projection-service healthy
+c-b copy-projection-service healthy
+c-c prod-projection-service starting"
+check "two distinct services" "copy-projection-service prod-projection-service" "$(echo $(projection_services))"
+
+echo "== no Coolify application UUID is written into the script =="
+# The class of bug this replaced: a host's UUID baked into a file installed on more than one host.
+for conf in "$(dirname "$SCRIPT")"/health-monitor.*.conf; do
+  while read -r name _ target _; do
+    case "$name" in ''|\#*) continue ;; esac
+    if grep -qF -- "$target" "$SCRIPT"; then
+      fail=$((fail + 1)); echo "  FAIL ${name}'s UUID from $(basename "$conf") appears in the script"
+    else
+      pass=$((pass + 1))
+    fi
+  done < "$conf"
+done
+
+container_for() { echo "$CONTAINER_AFTER_LOOKUP"; }
+SERVICE=stub
+CONTAINER_AFTER_LOOKUP=cid2
 
 run_case() { # name  attempts...
   local name="$1"; shift
