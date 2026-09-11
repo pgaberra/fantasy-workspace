@@ -144,8 +144,10 @@ finished with a list of what is left.
 7. **The last mile is verified in the same session, not assumed.** Merged is not deployed,
    deployed is not live, and ingested is not used:
    - A merge never reaches prod on its own; publishing the draft release does. A failed
-     promotion rolls back and says nothing, so read the container's `APP_VERSION` rather
-     than the release list.
+     promotion rolls back to the old container and opens a `prod-promotion-failed` issue in
+     that repo, but web and projection-service can only be checked by Coolify's word and a
+     release tagged before 2026-09-11 runs the old, silent workflow, so read the container's
+     `APP_VERSION` rather than the release list.
    - A scheduled job is not running until it has been seen firing once.
    - Data that is synced but that nothing reads is not in the product. The goalie depth
      chart sat ingested and unused for weeks, and nothing anywhere said so.
