@@ -65,6 +65,29 @@ Create it once, on **both** the staging and prod app:
 
 (Value can be `dev`; the first merge after setup overwrites it.)
 
+Also create `SENTRY_RELEASE` as a **Runtime** variable on each **staging backend** app (every
+service except `fantasy-web`, whose `@sentry/browser` takes its release from the `APP_VERSION`
+baked into the bundle). The script stamps it with the same tag, so staging events carry the
+release that is actually running (fantasy-workspace#61). Without it the stamp step still
+deploys, but prints a warning and the app's events carry no release. Production apps already
+have it; `promote_forced.sh` stamps it at promotion and fails without it.
+
+## 6. Turn Coolify's auto-deploy off on the staging app
+
+The stamped redeploy from `tag-on-merge` is **staging's only intended deploy path**. Coolify's
+own auto-deploy (the push webhook) must be **off** on every staging app, as it is in production.
+
+With it on, each merge starts two deploys of the same commit: the webhook build, carrying the
+previous `APP_VERSION`, and the stamped one seconds later. Whichever finishes last is what
+staging runs and what `/api/v1/versions` and the staging banner report, so staging can run the
+new code under the old version number. Promotion checks read `/versions`, so this is not
+harmless.
+
+The script looks for this: if the app has a webhook deployment from the last 30 minutes, it
+prints a `::warning::` annotation on the `tag-on-merge` run and still deploys. It warns rather
+than refusing like `promote_forced.sh` does, because a refusal would skip the stamped deploy and
+leave the unstamped webhook build as the only one.
+
 ## Checklist for a new service
 
 All five must be true, or the merge fails at the stamp step:
@@ -75,14 +98,16 @@ All five must be true, or the merge fails at the stamp step:
 4. Repo present in the whitelist inside `set_staging_version_forced.sh`
 5. `APP_VERSION` pre-created as a Runtime (or Build-time, for web) variable in Coolify
 
+These two don't fail the merge, but the run warns until they are true:
+
+6. `SENTRY_RELEASE` pre-created as a Runtime variable (not for web)
+7. Coolify auto-deploy off on the staging app
+
 ## Verify
 
 Merge any PR to the repo's `master` → the `tag-on-merge` run shows `ok: <repo> staging -> vX.Y.Z`
-→ staging redeploys → the version panel shows the real tag.
+with no warning annotations → staging redeploys → the version panel shows the real tag.
 
-The stamp step **fails the job loudly** if anything above is missing — it is deliberately not a
+The stamp step **fails the job loudly** if any of items 1–5 is missing — it is deliberately not a
 no-op, because a silent skip once left staging undeployed with nothing but a notice to show for
 it.
-
-> Note: staging also auto-deploys on the push itself, so each merge briefly builds twice (once
-> from the push with the previous value, once from this step with the new tag). Harmless on staging.

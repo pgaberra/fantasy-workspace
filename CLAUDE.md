@@ -4,7 +4,7 @@ Six-repo fantasy hockey application (SlapStat):
 
 | Repo | Role | Port |
 |---|---|---|
-| `fantasy-web` | Angular 21 frontend | 4200 |
+| `fantasy-web` | Angular frontend | 4200 |
 | `fantasy-bff` | Spring Boot 4 Backend-for-Frontend (auth, orchestration) | 8080 |
 | `fantasy-db-service` | Spring Boot 4 persistence (users, projections, shares — Postgres) | 8086 |
 | `fantasy-yahoo-service` | Spring Boot 4 Yahoo integration (per-user OAuth, league settings, **and the cached player read model** — identity + eligible positions + season stats, Postgres) | 8088 |
@@ -24,16 +24,23 @@ Each repo has its own `CLAUDE.md` for its own detail; this file holds what is sh
 
 All inter-service HTTP communication is **OpenAPI-first**:
 
-- Every service exposes its spec (`/v3/api-docs` via springdoc; `/openapi.json` on
-  projection-service).
+- Every service publishes its spec: the Spring services at `/v3/api-docs` via springdoc,
+  projection-service as the committed `specs/openapi.json` in its repo (regenerated with
+  `python -m projection.openapi_export`). Consumers pin that committed file; don't fetch
+  projection-service's spec from the running service, whose docs routes are being put behind
+  the key or switched off (fantasy-projection-service#168).
 - Consumers generate typed clients from the spec — never write hand-rolled HTTP clients.
 - `fantasy-web` → `fantasy-bff`: TypeScript client via `ng-openapi-gen`
   (`npm run generate:api`).
 - `fantasy-bff` → each downstream: Java model POJOs via the `openapi-generator` Gradle
   plugin, one task per service (`openApiGenerate` for db, plus `generateYahooClient`,
   `generateEspnClient`, `generateProjectionClient`).
-- The consumer commits a **verbatim pinned copy** of the producer's spec under `specs/`,
-  and CI fails if it drifts from the producer's `master`.
+- The consumer commits a **verbatim pinned copy** of the producer's spec under `specs/`.
+  The PR check (`check-pinned-spec.sh` in bff and web) only blames the branch: it **fails**
+  a PR that itself put the pin out of step with the producer's `master`, and only **warns**
+  when the base branch was already behind. Don't re-pin inside an unrelated PR to clear that
+  warning; land a separate re-pin. The scheduled `spec-freshness.yml` (weekday mornings, in
+  bff and web) fails on any stale pin, so that run is where staleness gets noticed.
 
 When a service changes its API: update the spec → regenerate the client → fix any
 compile errors → open a PR. This ensures breaking changes are caught at compile time.
