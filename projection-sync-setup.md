@@ -1,7 +1,8 @@
 # Projection sync: install on a server
 
 `projection-sync.sh` keeps fantasy-projection-service's store current every night (rosters,
-ingest, injuries, lines, re-projection). Nothing in Coolify or the service schedules it, and
+ingest, injuries, lines, re-projection, and in season the game logs and the club schedules).
+Nothing in Coolify or the service schedules it, and
 nothing deploys the files: they are copied onto each server by hand, so **a change merged here is
 not live on a server until someone installs it there.**
 
@@ -120,9 +121,14 @@ ssh root@$HOST 'journalctl -u projection-sync.service -f'
 ```
 
 A good run logs, in order, a `Swept`, an `Ingested seasons`, an `ESPN reports`, a `Read` and a
-`Projected` line, and the unit ends with `status=0/SUCCESS`:
+`Projected` line, and the unit ends with `status=0/SUCCESS`. **In season** (from the morning after
+the NHL's opening night to the end of June) a `Game logs for` and a `Scheduled` line come between
+`Ingested seasons` and `ESPN reports`; out of season there is an `out of season` line there
+instead. A `WARNING: projection season-underway gave no answer` line means the run could not ask
+the NHL which season is underway and fell back to October, which also reaches Sentry: the
+container is older than projection-service #165, or the NHL was down.
 ```
-ssh root@$HOST 'systemctl status projection-sync.service --no-pager | head -5; journalctl -u projection-sync.service -n 60 --no-pager | grep -E "FAILED|WARNING|Swept|Ingested|ESPN reports|Read |Projected"'
+ssh root@$HOST 'systemctl status projection-sync.service --no-pager | head -5; journalctl -u projection-sync.service -n 60 --no-pager | grep -E "FAILED|WARNING|Swept|Ingested|Game logs for|Scheduled|out of season|ESPN reports|Read |Projected"'
 ```
 
 **A manual start is not the timer.** The job is running only once the journal shows a run that

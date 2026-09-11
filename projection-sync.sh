@@ -21,8 +21,9 @@
 # back. It runs before the projection because the projection reads it.
 #
 # The game logs and the schedule run only in season, from the morning after opening night to the
-# end of June, when the season with games in it is the season being projected. Until they ran, the store's newest calendar in season was
-# last season's game logs moved forward a year: a 2026-27 return date was counted against
+# end of June, when the season with games in it is the season being projected. Until they ran, the
+# store's newest calendar in season was last season's game logs moved forward a year: a 2026-27
+# return date was counted against
 # 2025-26's three-week Olympic break, and Who's hot had no games at all for the season underway.
 # A return date is counted on the schedule and not on the logs, because the logs stop at last
 # night. Out of season neither runs, so the summer is the run it was before they existed.
