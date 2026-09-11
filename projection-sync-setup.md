@@ -13,8 +13,8 @@ container by the Coolify label `coolify.serviceName` ending in `-projection-serv
 
 | Server | IP | Installed |
 |---|---|---|
-| staging | `62.238.17.178` | yes, since August 2026; last copied 2026-09-11 from workspace #48, which predates the label lookup |
-| production | `157.180.126.72` | **no** (as of 2026-09-11) |
+| staging | `62.238.17.178` | yes, since August 2026; all five files copied 2026-09-11 20:33 UTC from workspace #53 (master 6879f49), checksums matched, both timers enabled; the off-schedule run after it succeeded |
+| production | `157.180.126.72` | **no** (as of 2026-09-11): prod-projection-service is v0.13.3, which lacks the sync's commands, and it is to be promoted together with the BFF and web rather than ahead of them (Alexander, 2026-09-11) |
 
 Update this table when either changes. Everything below runs from Git Bash on your machine,
 from any checkout of this repo, after `git fetch origin`. `HOST` is the server's IP.
