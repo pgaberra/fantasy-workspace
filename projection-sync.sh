@@ -9,6 +9,8 @@
 #
 #   projection rosters                   who exists — rosters + prospect lists, identity only
 #   projection ingest --season <year>    what they played — MoneyPuck + NHL boxcar
+#   projection game-logs --season <year> what they played, game by game — in season only
+#   projection schedule --season <year>  when the season's games fall — in season only
 #   projection injuries                  who is hurt right now — ESPN's report
 #   projection lines                     what role they are expected to play — Daily Faceoff
 #   projection project --season <year>   what we think they will do — the model's own output
@@ -17,6 +19,24 @@
 # archive, the return dates are a club's guess and they slip, and the projection is only as fresh
 # as the last refresh: a player listed back on 7 November has to stop being deducted once he is
 # back. It runs before the projection because the projection reads it.
+#
+# The game logs run only in season, from the morning after opening night to the end of June, when
+# the season with games in it is the season being projected. The schedule runs every night, for the
+# season being projected, including a summer's coming season once the NHL has published it. Until
+# they ran, the store's newest calendar was last season's game logs moved forward a year: a 2026-27
+# return date was counted against
+# 2025-26's three-week Olympic break, and Who's hot had no games at all for the season underway.
+# A return date is counted on the schedule and not on the logs, because the logs stop at last
+# night. Out of season the game logs do not run: the season with games is over and logged.
+#
+# A failed night is retried once, in the afternoon, before anybody is told. Most failures here fix
+# themselves within hours (MoneyPuck has not published a new season's file the morning after
+# opening night, a source is briefly down, a deploy lands on a step twice), and a Sentry alert for
+# each one would train everyone to ignore the alert that matters. So the morning run keeps its
+# failures to the journal, projection-sync-retry.timer runs this again with `--retry` at 16:30 UTC,
+# that run does the whole sync again only if the morning failed, and whatever still fails then goes
+# to Sentry. A morning failure nobody retried (the retry timer missing, or not firing) is reported
+# by the next run, so the quiet morning is never quiet for long. See `plan_attempt`.
 #
 # The lines step is a snapshot too, and for the same reason has to be taken repeatedly: there is
 # no archive of what a club's page said last week, so a day not swept is a day gone. The model reads
@@ -39,7 +59,8 @@
 # fails quietly is the whole problem this guards against: nothing breaks, no page errors, the
 # rookie markers just gently stop being true.
 #
-#   projection-sync.sh                    run the sync
+#   projection-sync.sh                    run the sync (the morning timer, or by hand)
+#   projection-sync.sh --retry            run it again only if today's run failed (the afternoon timer)
 #   projection-sync.sh --find-container   print the service and container it would use, run nothing
 set -uo pipefail
 
@@ -52,6 +73,11 @@ SERVICE_SUFFIX=-projection-service
 
 DSN_FILE=/root/.health-dsn
 ENV_NAME="$(cat /root/.health-env 2>/dev/null || echo unknown)"
+
+# What the last run left behind, one line: its UTC date, which attempt it was, and ok or failed.
+# The afternoon retry reads it to decide whether there is anything to retry. The directory is the
+# units' StateDirectory; the variable only exists so the test can point it somewhere else.
+STATE_FILE="${PROJECTION_SYNC_STATE:-/var/lib/projection-sync/last-run}"
 
 log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"; }
 
@@ -87,12 +113,22 @@ send_sentry() { # level message
     --data "{\"message\":\"${msg}\",\"level\":\"${level}\",\"platform\":\"other\",\"environment\":\"${ENV_NAME}\",\"server_name\":\"$(hostname)\",\"logger\":\"projection-sync\",\"tags\":{\"monitor\":\"ingestion\"}}"
 }
 
-# The season with games in it, as a start year. The NHL season opens in October, so from October
-# that is this calendar year and before it the one before. Asking MoneyPuck for a season that has
-# not been played yet returns nothing useful and would only ever fail, so the cutover is the
-# opening month rather than the summer.
+# The season with games in it, as a start year: the newest season whose opening night has passed,
+# by the NHL's own published dates (`projection season-underway`). It used to be a calendar rule,
+# October on, and seasons do not open by the calendar: 2026-27 opens on 29 September, so its first
+# two nights were read as the season before. Asking MoneyPuck for a season with no games in it
+# returns nothing useful, which is why the cutover is opening night and not the summer.
+#
+# If the service cannot say (the NHL is down, or the container predates the command), the October
+# rule stands in, with a warning to the journal and to Sentry: a sync that ran on a guessed season
+# must not look like one that knew.
 current_season() {
-  local year month
+  local answer year month
+  answer=$(docker exec "$CID" projection season-underway 2>/dev/null \
+    | sed -n 's/^Season underway: \([0-9][0-9][0-9][0-9]\),.*/\1/p')
+  if [ -n "$answer" ]; then echo "$answer"; return 0; fi
+  log "WARNING: projection season-underway gave no answer; taking October as opening night" >&2
+  send_sentry warning "projection-sync: could not read which season is underway; used the October rule"
   year=$(date -u +%Y); month=$(date -u +%m)
   if [ "$((10#$month))" -ge 10 ]; then echo "$year"; else echo "$((year - 1))"; fi
 }
@@ -109,6 +145,13 @@ target_season() {
   local year month
   year=$(date -u +%Y); month=$(date -u +%m)
   if [ "$((10#$month))" -ge 7 ]; then echo "$year"; else echo "$((year - 1))"; fi
+}
+
+# In season: the season with games in it is the season being projected, which runs from the
+# morning after opening night to the end of June. The steps that read the season underway run only
+# then; see the top of this file. Reads SEASON and TARGET, so the NHL is asked once a night.
+in_season() {
+  [ "$SEASON" = "$TARGET" ]
 }
 
 # A deploy replaces the container underneath a running step, and it goes wrong in two ways.
@@ -140,7 +183,7 @@ run_step() {
     CID="$(container_for "$SERVICE")"
     if [ -z "$CID" ]; then
       log "  FAILED: no container after the retry wait"
-      send_sentry error "projection-sync: ${description} lost its container to a deploy"
+      report_failure "projection-sync: ${description} lost its container to a deploy"
       failed=1
       return
     fi
@@ -151,7 +194,7 @@ run_step() {
     log "  $output"
   else
     log "  FAILED (status ${status}): ${output:-<no output at all>}"
-    send_sentry error "projection-sync: ${description} failed"
+    report_failure "projection-sync: ${description} failed"
     failed=1
   fi
 }
@@ -161,35 +204,97 @@ step_worked() {
   [ "$1" -eq 0 ] && printf '%s' "$2" | grep -qF -- "$3"
 }
 
+# Which attempt this run is today: 1 for the morning run (or one started by hand), 2 for an
+# afternoon retry of a morning that failed, and nothing at all for a retry with nothing to retry.
+# One retry and no more: a second failure is reported, and the next morning starts again at 1.
+#
+# A failed first attempt that no retry followed is reported here, by the next run, before it does
+# anything else. Without that, a missing or broken retry timer would turn every failure into one
+# nobody hears about, which is the silent night this whole file exists to prevent.
+plan_attempt() { # mode (run|retry)
+  local mode="$1" today last_date="" last_attempt="" last_outcome=""
+  today=$(date -u +%F)
+  [ -r "$STATE_FILE" ] && read -r last_date last_attempt last_outcome < "$STATE_FILE"
+  if [ "$mode" = retry ]; then
+    if [ "$last_date" = "$today" ] && [ "$last_attempt" = 1 ] && [ "$last_outcome" = failed ]; then
+      echo 2
+    fi
+    return 0
+  fi
+  if [ "$last_outcome" = failed ] && [ "$last_attempt" = 1 ] && [ "$last_date" != "$today" ]; then
+    send_sentry error "projection-sync: the run on ${last_date} failed and no retry followed it"
+  fi
+  echo 1
+}
+
+# A failure on the first attempt goes to the journal and waits for the retry; one on the retry goes
+# to Sentry, since there is no third try to wait for. Unset (`--find-container`) reports as a retry.
+report_failure() { # message
+  if [ "${ATTEMPT:-2}" -ge 2 ]; then
+    send_sentry error "$1"
+  else
+    log "  not sent to Sentry: the afternoon retry reports it if it fails again"
+  fi
+}
+
+# Written at the end of every sync, so the retry knows what happened. A state file that cannot be
+# written means a failure will never be retried, and that is itself worth hearing about.
+record_run() { # outcome (ok|failed)
+  mkdir -p "$(dirname "$STATE_FILE")" 2>/dev/null
+  if ! echo "$(date -u +%F) ${ATTEMPT} $1" > "$STATE_FILE" 2>/dev/null; then
+    log "WARNING: could not write ${STATE_FILE}; a failed run will not be retried"
+    send_sentry warning "projection-sync: could not write its state file, so failures are not retried"
+  fi
+}
+
 FIND_ONLY=0
-if [ "${1:-}" = "--find-container" ]; then
-  FIND_ONLY=1
-  send_sentry() { :; }  # somebody is at the terminal reading the answer
-fi
+MODE=run
+case "${1:-}" in
+  --find-container)
+    FIND_ONLY=1
+    send_sentry() { :; } ;;  # somebody is at the terminal reading the answer
+  --retry)
+    MODE=retry ;;
+esac
 
 # Without the DSN file every failure below reaches the journal and nothing else. health-monitor.sh
 # falls back to a DSN scavenged from a container; this does not, so say so on every run.
 [ -s "$DSN_FILE" ] || log "WARNING: no ${DSN_FILE}; failures will not reach Sentry"
 
+# Before any container is looked for: a retry with nothing to retry has nothing to look for.
+if [ "$FIND_ONLY" = 0 ]; then
+  ATTEMPT="$(plan_attempt "$MODE")"
+  if [ -z "$ATTEMPT" ]; then
+    log "retry: nothing to retry (today's run did not fail, or has been retried already)"
+    exit 0
+  fi
+  [ "$ATTEMPT" = 2 ] && log "retrying today's failed run; whatever fails now goes to Sentry"
+fi
+
+# The lookup failing ends the run, and counts as a failed run like any other.
+give_up() { # message sentry-message
+  log "$1"
+  report_failure "$2"
+  [ "$FIND_ONLY" = 1 ] || record_run failed
+  exit 1
+}
+
 SERVICES="$(projection_services)"
 case "$(printf '%s' "$SERVICES" | grep -c .)" in
   0)
-    log "no running container has a Coolify service name ending in ${SERVICE_SUFFIX}; nothing to do"
-    send_sentry error "projection-sync: no projection-service container found"
-    exit 1 ;;
+    give_up "no running container has a Coolify service name ending in ${SERVICE_SUFFIX}; nothing to do" \
+      "projection-sync: no projection-service container found" ;;
   1)
     SERVICE="$SERVICES" ;;
   *)
-    log "more than one Coolify service ends in ${SERVICE_SUFFIX} ($(echo $SERVICES)); refusing to guess"
-    send_sentry error "projection-sync: more than one projection-service on this host"
-    exit 1 ;;
+    give_up "more than one Coolify service ends in ${SERVICE_SUFFIX} ($(echo $SERVICES)); refusing to guess" \
+      "projection-sync: more than one projection-service on this host" ;;
 esac
 
 CID="$(container_for "$SERVICE")"
 if [ -z "$CID" ]; then
-  log "${SERVICE} has no running container; nothing to do"
-  send_sentry error "projection-sync: no projection-service container found"
-  exit 1
+  give_up "${SERVICE} has no running container; nothing to do" \
+    "projection-sync: no projection-service container found"
 fi
 
 if [ "$FIND_ONLY" = 1 ]; then
@@ -213,6 +318,25 @@ run_step "projection rosters" "Swept " projection rosters
 run_step "projection ingest --season ${SEASON}" "Ingested seasons" \
   projection ingest --season "$SEASON"
 
+# The season underway's game logs, in season only, and after the ingest, because they are fetched
+# for the player-seasons it has just recorded, so a call-up's games arrive the night he does. Its
+# failure is not fatal: the logs are restated in one transaction, so a failed night leaves
+# yesterday's.
+if in_season; then
+  run_step "projection game-logs --season ${SEASON}" "Game logs for" \
+    projection game-logs --season "$SEASON"
+else
+  log "out of season (${SEASON} has the games, ${TARGET} is projected): no game logs"
+fi
+
+# The published schedule of the season being projected, every night and before the projection,
+# because the projection counts return dates on it and #161's lineup gate reads opening night off
+# it. In the summer that is the coming season's, which the NHL publishes some time in July; until
+# it has, the step says so and succeeds (projection-service #164), and the projection falls back
+# to last season's calendar. Not fatal either: a failed night leaves yesterday's schedule.
+run_step "projection schedule --season ${TARGET}" "Scheduled " \
+  projection schedule --season "$TARGET"
+
 # Injuries before the projection, because the projection reads them. Its own failure is not
 # fatal to the run: an injury table one day stale is a smaller error than no re-projection at
 # all, and the model treats a player it knows nothing about as fit, which is what it did before
@@ -231,4 +355,5 @@ run_step "projection lines" "Read " projection lines
 run_step "projection project --season ${TARGET}" "Projected " \
   projection project --season "$TARGET"
 
+if [ "$failed" = 0 ]; then record_run ok; else record_run failed; fi
 exit "$failed"

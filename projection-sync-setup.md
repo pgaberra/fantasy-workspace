@@ -1,11 +1,13 @@
 # Projection sync: install on a server
 
 `projection-sync.sh` keeps fantasy-projection-service's store current every night (rosters,
-ingest, injuries, lines, re-projection). Nothing in Coolify or the service schedules it, and
+ingest, injuries, lines, re-projection, and in season the game logs and the club schedules).
+Nothing in Coolify or the service schedules it, and
 nothing deploys the files: they are copied onto each server by hand, so **a change merged here is
 not live on a server until someone installs it there.**
 
-The script, the service and the timer are the same files on both servers. The script finds its
+The script and its four units (the nightly service and timer, and the afternoon retry's service and
+timer) are the same files on both servers. The script finds its
 container by the Coolify label `coolify.serviceName` ending in `-projection-service`
 (`staging-projection-service`, `prod-projection-service`), so there is nothing to edit per host.
 
@@ -63,7 +65,7 @@ has. Production's projection-service is far behind master, so first:
    (it logs a warning saying so). The health monitor copes without the file by borrowing a DSN from
    a container; the sync does not.
 
-## 1. Copy the three files from master
+## 1. Copy the five files from master
 
 Straight from the `origin/master` blob, so a working copy on another branch or with CRLF endings
 cannot leak across. Keep the old script if there is one.
@@ -74,16 +76,18 @@ ssh root@$HOST 'test -f /root/projection-sync.sh && cp /root/projection-sync.sh 
 MSYS_NO_PATHCONV=1 git show origin/master:projection-sync.sh      | ssh root@$HOST 'cat > /root/projection-sync.sh && chmod 700 /root/projection-sync.sh'
 MSYS_NO_PATHCONV=1 git show origin/master:projection-sync.service | ssh root@$HOST 'cat > /etc/systemd/system/projection-sync.service'
 MSYS_NO_PATHCONV=1 git show origin/master:projection-sync.timer   | ssh root@$HOST 'cat > /etc/systemd/system/projection-sync.timer'
+MSYS_NO_PATHCONV=1 git show origin/master:projection-sync-retry.service | ssh root@$HOST 'cat > /etc/systemd/system/projection-sync-retry.service'
+MSYS_NO_PATHCONV=1 git show origin/master:projection-sync-retry.timer   | ssh root@$HOST 'cat > /etc/systemd/system/projection-sync-retry.timer'
 ```
 
 ## 2. Compare checksums against master
 
 ```
-for f in projection-sync.sh projection-sync.service projection-sync.timer; do MSYS_NO_PATHCONV=1 git show origin/master:$f | sha256sum; done
-ssh root@$HOST 'sha256sum /root/projection-sync.sh /etc/systemd/system/projection-sync.service /etc/systemd/system/projection-sync.timer'
+for f in projection-sync.sh projection-sync.service projection-sync.timer projection-sync-retry.service projection-sync-retry.timer; do MSYS_NO_PATHCONV=1 git show origin/master:$f | sha256sum; done
+ssh root@$HOST 'sha256sum /root/projection-sync.sh /etc/systemd/system/projection-sync.service /etc/systemd/system/projection-sync.timer /etc/systemd/system/projection-sync-retry.service /etc/systemd/system/projection-sync-retry.timer'
 ```
 
-The three hashes must match pairwise. Do not go on if one does not.
+The five hashes must match pairwise. Do not go on if one does not.
 
 ## 3. Check it finds the right container, before it runs anything
 
@@ -99,17 +103,17 @@ same way every night.
 ## 4. Enable the timer
 
 ```
-ssh root@$HOST 'systemctl daemon-reload && systemctl enable --now projection-sync.timer'
+ssh root@$HOST 'systemctl daemon-reload && systemctl enable --now projection-sync.timer projection-sync-retry.timer'
 ```
 
-On staging, where the timer is already enabled, `daemon-reload` alone picks up changed units;
-`enable --now` is harmless there.
+On staging the nightly timer is already enabled, but the retry timer is new, so run the whole line
+there too; `enable --now` is harmless for a timer that is already on.
 
 ## 5. See it fire
 
 The next firing time, and the last:
 ```
-ssh root@$HOST 'systemctl list-timers projection-sync.timer'
+ssh root@$HOST 'systemctl list-timers "projection-sync*"'
 ```
 
 To prove the script now rather than tomorrow, start one run off-schedule (the timer still fires
@@ -119,10 +123,26 @@ ssh root@$HOST 'systemctl start --no-block projection-sync.service'
 ssh root@$HOST 'journalctl -u projection-sync.service -f'
 ```
 
-A good run logs, in order, a `Swept`, an `Ingested seasons`, an `ESPN reports`, a `Read` and a
-`Projected` line, and the unit ends with `status=0/SUCCESS`:
+A good run logs, in order, a `Swept`, an `Ingested seasons`, a `Game logs for` line **in season**
+(from the morning after the NHL's opening night to the end of June) or an `out of season` line
+otherwise, a `Scheduled`, an `ESPN reports`, a `Read` and a `Projected` line, and the unit ends
+with `status=0/SUCCESS`. In early July, before the NHL has published the coming season, the
+`Scheduled` line says so and the run still succeeds. A `WARNING: projection season-underway gave
+no answer` line means the run could not ask the NHL which season is underway and fell back to
+October, which also reaches Sentry: the container is older than projection-service #165, or the
+NHL was down.
 ```
-ssh root@$HOST 'systemctl status projection-sync.service --no-pager | head -5; journalctl -u projection-sync.service -n 60 --no-pager | grep -E "FAILED|WARNING|Swept|Ingested|ESPN reports|Read |Projected"'
+ssh root@$HOST 'systemctl status projection-sync.service --no-pager | head -5; journalctl -u projection-sync.service -n 60 --no-pager | grep -E "FAILED|WARNING|Swept|Ingested|Game logs for|Scheduled|out of season|ESPN reports|Read |Projected"'
+```
+
+**A failed run is retried once.** Every run writes how it ended to
+`/var/lib/projection-sync/last-run` (`<UTC date> <attempt> ok|failed`). A failure on the morning
+run is logged and not sent to Sentry; `projection-sync-retry.service` fires at 16:30 UTC, does
+nothing unless that day's run failed (it logs `nothing to retry`), and otherwise runs the whole
+sync again and sends whatever still fails to Sentry. A failed morning that no retry followed is
+reported to Sentry by the next run. To see both halves:
+```
+ssh root@$HOST 'cat /var/lib/projection-sync/last-run; journalctl -u projection-sync-retry.service -n 20 --no-pager'
 ```
 
 **A manual start is not the timer.** The job is running only once the journal shows a run that
