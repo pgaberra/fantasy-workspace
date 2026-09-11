@@ -9,6 +9,8 @@
 #
 #   projection rosters                   who exists — rosters + prospect lists, identity only
 #   projection ingest --season <year>    what they played — MoneyPuck + NHL boxcar
+#   projection game-logs --season <year> what they played, game by game — in season only
+#   projection schedule --season <year>  when the season's games fall — in season only
 #   projection injuries                  who is hurt right now — ESPN's report
 #   projection lines                     what role they are expected to play — Daily Faceoff
 #   projection project --season <year>   what we think they will do — the model's own output
@@ -17,6 +19,13 @@
 # archive, the return dates are a club's guess and they slip, and the projection is only as fresh
 # as the last refresh: a player listed back on 7 November has to stop being deducted once he is
 # back. It runs before the projection because the projection reads it.
+#
+# The game logs and the schedule run only in season, October to June, when the season with games
+# in it is the season being projected. Until they ran, the store's newest calendar in season was
+# last season's game logs moved forward a year: a 2026-27 return date was counted against
+# 2025-26's three-week Olympic break, and Who's hot had no games at all for the season underway.
+# A return date is counted on the schedule and not on the logs, because the logs stop at last
+# night. Out of season neither runs, so July to September is the run it was before they existed.
 #
 # The lines step is a snapshot too, and for the same reason has to be taken repeatedly: there is
 # no archive of what a club's page said last week, so a day not swept is a day gone. The model reads
@@ -99,6 +108,12 @@ target_season() {
   if [ "$((10#$month))" -ge 7 ]; then echo "$year"; else echo "$((year - 1))"; fi
 }
 
+# In season: the season with games in it is the season being projected, which is October to June.
+# The steps that read the season underway run only then; see the top of this file.
+in_season() {
+  [ "$(current_season)" = "$(target_season)" ]
+}
+
 # A deploy replaces the container underneath a running step, and it goes wrong in two ways.
 #
 # The loud one: docker kills the exec with 137. That is not a failure of the work, it is the work
@@ -171,6 +186,20 @@ run_step "projection rosters" "Swept " projection rosters
 
 run_step "projection ingest --season ${SEASON}" "Ingested seasons" \
   projection ingest --season "$SEASON"
+
+# The season underway, in season only. Game logs after the ingest, because they are fetched for the
+# player-seasons it has just recorded, so a call-up's games arrive the night he does. The schedule
+# before the projection, because the projection counts return dates on it. Neither failure is
+# fatal: each restates its rows in one transaction, so a failed night leaves yesterday's, and a
+# store with no schedule at all falls back to last season's calendar, which is where it started.
+if in_season; then
+  run_step "projection game-logs --season ${SEASON}" "Game logs for" \
+    projection game-logs --season "$SEASON"
+  run_step "projection schedule --season ${TARGET}" "Scheduled " \
+    projection schedule --season "$TARGET"
+else
+  log "out of season (${SEASON} has the games, ${TARGET} is projected): no game logs, no schedule"
+fi
 
 # Injuries before the projection, because the projection reads them. Its own failure is not
 # fatal to the run: an injury table one day stale is a smaller error than no re-projection at

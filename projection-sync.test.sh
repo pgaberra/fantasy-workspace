@@ -100,6 +100,31 @@ run_step lines "Read " projection lines
 check "no failure" 0 "$failed"
 check "one attempt" 1 "$(wc -l < "$STATE/attempts" | tr -d ' ')"
 
+# The gate in front of the in-season steps, with the script's own `current_season`,
+# `target_season` and `in_season` and a stubbed clock. July to September must stay the run it was.
+echo "== in season is October to June, and never July to September =="
+SEASON_HELPERS=$(mktemp)
+sed -n '/^current_season()/,/^}/p;/^target_season()/,/^}/p;/^in_season()/,/^}/p' "$SCRIPT" \
+  > "$SEASON_HELPERS"
+. "$SEASON_HELPERS"
+date() { case "$*" in *%Y*) echo "$FAKE_YEAR" ;; *%m*) echo "$FAKE_MONTH" ;; esac; }
+for when in "2026 07 no" "2026 09 no" "2026 10 yes" "2026 12 yes" "2027 01 yes" "2027 06 yes"; do
+  read -r FAKE_YEAR FAKE_MONTH expected <<< "$when"
+  if in_season; then got=yes; else got=no; fi
+  check "in season in ${FAKE_YEAR}-${FAKE_MONTH}" "$expected" "$got"
+done
+unset -f date
+
+echo "== the in-season steps sit behind the gate =="
+gated=$(sed -n '/^if in_season; then/,/^fi/p' "$SCRIPT")
+for step in "projection game-logs" "projection schedule"; do
+  if printf '%s' "$gated" | grep -qF -- "run_step \"$step"; then
+    pass=$((pass + 1))
+  else
+    fail=$((fail + 1)); echo "  FAIL '$step' does not run behind in_season"
+  fi
+done
+
 # The gap `run_step`'s own comment names: the markers are strings on both sides and nothing
 # checked that they still agree. A step whose marker no longer matches what the command prints
 # reports a failure on every clean run, which is the same alarm-that-cries-wolf this file exists
