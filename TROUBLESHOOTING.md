@@ -1,26 +1,41 @@
 # Troubleshooting — "I got a Sentry error, now what?"
 
-The runbook for debugging a backend error, end to end. Backend services (bff, db-service,
-espn-service, yahoo-service) forward every **ERROR-level log** to **Sentry**, which emails you
-and groups the error into an issue. (Architecture & deploy model:
-[`INFRASTRUCTURE.md`](../INFRASTRUCTURE.md), which lives outside this repo, one level above the
-workspace checkout.)
+The runbook for debugging an error, end to end. Every repo reports faults to **Sentry** (org
+`slapstat`, EU region, `https://de.sentry.io`), which emails you and groups the error into an
+issue. (Architecture & deploy model: [`INFRASTRUCTURE.md`](../INFRASTRUCTURE.md), which lives
+outside this repo, one level above the workspace checkout.)
 
-> Quick links: **Sentry** project `slapstat-backend` · **Coolify** `https://coolify.slapstat.com`
-> · prod API `https://api.slapstat.com` · staging API `https://api.staging.slapstat.com`.
+## Which Sentry project a repo reports to
+
+| Repo | Sentry project | What reaches it |
+|---|---|---|
+| `fantasy-bff` | `java-spring-boot` | ERROR logs via `sentry-logback`, INFO logs as breadcrumbs |
+| `fantasy-db-service` | `java-spring-boot` | same |
+| `fantasy-yahoo-service` | `java-spring-boot` | same |
+| `fantasy-espn-service` | `java-spring-boot` | same |
+| `fantasy-projection-service` | `fantasy-projection-service` | unhandled API exceptions (not `HTTPException`s below 500) and every failed CLI run, via `sentry-sdk[fastapi]` |
+| `fantasy-web` | `fantasy-web` | browser errors via `@sentry/browser`, including everything `NotificationService.error` shows |
+
+The four Spring services share `java-spring-boot` and are told apart by the culprit's package
+(§1). Splitting that project is fantasy-workspace#39; when it happens, update this table.
+
+> Quick links: **Sentry** projects `java-spring-boot` · `fantasy-projection-service` ·
+> `fantasy-web` · **Coolify** `https://coolify.slapstat.com` · prod API
+> `https://api.slapstat.com` · staging API `https://api.staging.slapstat.com`.
 
 ---
 
 ## 1. The email is just a ping — open the Sentry issue
 
-Click through to the **issue in Sentry**. That's the main surface. It tells you:
+Click through to the **issue in Sentry**. That's the main surface. The project it sits in already
+narrows it down (table above). The issue tells you:
 
 | In the issue | What it tells you |
 |---|---|
-| **Environment** tag | `staging` or `production` — which env the error came from. |
-| **Release** | the version, e.g. `v0.2.1` (prod only; staging shows none — it's always latest). |
-| **Culprit / stack trace** | the exact file + line, and the Java package → **which service**: `com.fantasy.db` = db-service, `.espn` = espn-service, `.bff` = bff, `.yahoo` = yahoo-service. A Python traceback is projection-service, which has no Sentry SDK — it will not appear here at all, so look in its container logs. |
-| **Breadcrumbs** | the INFO logs *just before* the error — often enough to see what led there. |
+| **Environment** tag | `staging` or `production` — which env the error came from. Both report into the same projects. |
+| **Release** | the version, e.g. `v0.2.1`. Production stamps it at promotion. On staging, `fantasy-web` always carries the merge's tag. The backends carry it only where the staging app has a `SENTRY_RELEASE` variable for the stamp to update (fantasy-workspace#61); where it doesn't, the release is empty. |
+| **Culprit / stack trace** | the exact file + line. In `java-spring-boot`, the Java package tells you **which service**: `com.fantasy.db` = db-service, `.espn` = espn-service, `.bff` = bff, `.yahoo` = yahoo-service. A Python traceback is projection-service and lives in its own project; a JavaScript one is the web. |
+| **Breadcrumbs** | what happened *just before* the error (INFO logs for the Java services, navigation and requests for the web) — often enough to see what led there. |
 | **Events / frequency** | first seen, last seen, count. Grouped, so one recurring error = one issue. |
 
 ---
@@ -38,6 +53,9 @@ The message + stack trace usually tells you which of these it is:
 - **Code bug** — an unexpected exception (NullPointer, parsing, etc.) in a controller/service.
   The stack trace points to the line. → fix in code.
 - **Config/env** — auth/key mismatch, missing env var. Check the app's env in Coolify.
+- **A failed projection-service CLI run** (`projection ingest`, `projection game-logs`, …) —
+  usually the nightly sync on the host. A single failure may be retried later the same day; see
+  `projection-sync-setup.md` before chasing it.
 
 The **Release** tag answers "did this start in a specific version?" — compare against earlier
 versions in Sentry's **Releases** view.
@@ -52,13 +70,16 @@ Sentry gives the exception + breadcrumbs. For the full log stream around that mo
   **Logs** tab → scroll to the timestamp from the Sentry event.
 - **SSH (full control):** `ssh root@157.180.126.72` (prod) or `root@62.238.17.178` (staging),
   then `docker logs --since 10m <container>` (find it with `docker ps`).
+- **The web** has no server log for a browser error; the Sentry event (breadcrumbs, URL, user id)
+  is the whole record.
 
 ---
 
 ## 4. Staging is your safety net
 
-- A **staging** error means you caught it **before** prod. Staging auto-deploys the latest
-  `master`, so it's the early-warning system — fix before promoting.
+- A **staging** error means you caught it **before** prod. Every merge to `master` deploys that
+  commit to staging (the `tag-on-merge` stamp step), so it's the early-warning system — fix
+  before promoting.
 - A **prod** error affects the pinned prod version → fix, verify on staging, then promote.
 
 ---
@@ -102,8 +123,10 @@ deploy; the self-service steps are below):
 
 ## 7. Principles baked into this
 
-- **Never silence an error:** every 5xx/fault logs at `ERROR` (→ Sentry). 4xx/expected
-  outcomes (validation, not-found, not-connected) are *not* logged — so Sentry stays
-  low-noise and an alert means a real fault.
-- **One project, env-tagged:** all four backends report to the one Sentry project; filter by
-  `environment` (staging/production) and read the service off the Java package.
+- **Never silence an error:** every 5xx/fault is reported (an `ERROR` log in the Java services,
+  a captured exception in projection-service and the web). 4xx/expected outcomes (validation,
+  not-found, not-connected) are *not* — so Sentry stays low-noise and an alert means a real fault.
+- **A project per repo, except the Spring four:** `fantasy-web` and `fantasy-projection-service`
+  each have their own project; bff, db-service, yahoo-service and espn-service share
+  `java-spring-boot` until #39 splits it. Every project is env-tagged: filter by `environment`
+  (staging/production), and in `java-spring-boot` read the service off the Java package.

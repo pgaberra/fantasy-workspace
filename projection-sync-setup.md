@@ -43,7 +43,7 @@ has. Production's projection-service is far behind master, so first:
      | ssh root@157.180.126.72 'docker exec -i $(docker ps -q --filter name=^iqxk0i5swnh8ga31lf7f45zp | head -1) sh -c "psql -U \$POSTGRES_USER -d \$POSTGRES_DB"'
    ```
    (`iqxk0i5swnh8ga31lf7f45zp` is production's projection-postgres, the same form as *Reaching a
-   database* in `INFRASTRUCTURE.md` §8.) If the target season is 2026, seasons 2023, 2024 and 2025
+   database* in Part II of `INFRASTRUCTURE.md`.) If the target season is 2026, seasons 2023, 2024 and 2025
    must each have rows in both tables. If they do not, backfill by hand **before** enabling the
    timer, detached so a dropped SSH session does not kill it, and outside the unit's 90-minute cap:
    ```
