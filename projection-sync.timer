@@ -2,9 +2,10 @@
 # /etc/systemd/system/projection-sync.timer; the same file on staging and in production.
 #
 # Daily, before the ESPN player pool syncs at 07:45 UTC, so the two sides of the id match are
-# never more than a few hours out of step with each other. That ordering is staging's reason:
-# production takes its player pool from yahoo-service rather than ESPN (INFRASTRUCTURE.md §9), so
-# there the time is simply inherited. Persistent catches up a run missed while the box was down —
+# never more than a few hours out of step with each other. The ordering matters wherever the BFF
+# reads the ESPN pool (`PLAYERS_SOURCE`, INFRASTRUCTURE.md Part II "B. Services"); on a box whose
+# BFF reads yahoo-service instead, the time is simply inherited. Persistent catches up a run missed
+# while the box was down —
 # a skipped day would otherwise leave the store silently stale until somebody noticed a wrong
 # rookie marker.
 [Unit]
