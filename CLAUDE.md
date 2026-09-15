@@ -207,6 +207,13 @@ doing nothing looks exactly like a quiet day, and that is the failure the log ex
   In the six repos with CI (web and the five services) the `protect-master` ruleset enforces it: GitHub refuses the merge
   until the PR is green and up to date with `master`. fantasy-workspace has no CI, so there it is
   still on whoever merges.
+- **Dependabot PRs are the [`dependabot-round`](.claude/skills/dependabot-round/SKILL.md)'s to
+  merge.** A scheduled task in the desktop app, every three hours from the guarded folder
+  `C:/Users/Alexander/dependabot-round`, brings each one in the six service repos up to date,
+  waits for CI, squash-merges it once green, and files an issue for one that stays red. It merges
+  nothing else and fixes no code, and every run comments on fantasy-workspace#70. A red one is
+  fixed in a PR of its own that carries the bump; Dependabot closes its PR once `master` has the
+  version, and the round closes its issue.
 - **Every repo is public** (since 2026-09-15). Anyone signed in to GitHub can read issues, PRs,
   comments, Actions logs and artifacts, and can open issues, comment and open PRs. So nothing
   about a user goes into any of them (no email, user id, IP, location, device, or anything
