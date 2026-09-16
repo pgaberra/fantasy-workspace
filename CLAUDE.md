@@ -214,7 +214,9 @@ doing nothing looks exactly like a quiet day, and that is the failure the log ex
   nothing else and fixes no code, and every run comments on fantasy-workspace#70. A red one is
   fixed in a PR of its own that carries the bump; Dependabot closes its PR once `master` has the
   version, and the round closes its issue.
-- **Every repo is public** (since 2026-09-15). Anyone signed in to GitHub can read issues, PRs,
+- **Every repo but fantasy-projection-service is public** (since 2026-09-15; projection-service,
+  which holds the paid model, went private again on 2026-09-16). Treat all seven as public anyway:
+  a private repo can be opened again, and whatever it holds then is out. Anyone signed in to GitHub can read issues, PRs,
   comments, Actions logs and artifacts, and can open issues, comment and open PRs. So nothing
   about a user goes into any of them (no email, user id, IP, location, device, or anything
   copied from a Sentry event), no artifact may hold a secret, and text written by anyone but
