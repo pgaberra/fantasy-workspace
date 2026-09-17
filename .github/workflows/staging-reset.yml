@@ -1,0 +1,153 @@
+name: Staging reset
+
+# Puts staging's user data back to a fixed baseline every night: a premium and a free test account
+# and the E2E account, recreated from scratch, plus the admin account left as it is. Every other
+# account goes.
+# What survives and how to restore a backup: staging-reset-setup.md.
+on:
+  schedule:
+    # After yahoo-service's player sync (04:00) and before the E2E suite (06:00), so every E2E run
+    # starts from the baseline.
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'staging-reset/**'
+      - 'staging_reset_forced*'
+      - '.github/workflows/staging-reset.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+# Never two resets at once, and never cancel one halfway: each database step is its own
+# transaction, so a cancelled run leaves staging half reset until the next one.
+concurrency:
+  group: staging-reset-${{ github.event_name == 'pull_request' && github.ref || 'staging' }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Reset SQL against the services' migrations
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+
+      # Master of each service, which is what staging runs within minutes of a merge. A migration
+      # that adds a user table the reset does not know fails here, before staging is touched.
+      - uses: actions/checkout@v7
+        with:
+          repository: pgaberra/fantasy-db-service
+          path: services/db
+          sparse-checkout: src/main/resources/db/migration
+      - uses: actions/checkout@v7
+        with:
+          repository: pgaberra/fantasy-yahoo-service
+          path: services/yahoo
+          sparse-checkout: src/main/resources/db/migration
+      - uses: actions/checkout@v7
+        with:
+          repository: pgaberra/fantasy-espn-service
+          path: services/espn
+          sparse-checkout: src/main/resources/db/migration
+
+      - name: Forced command
+        run: ./staging_reset_forced.test.sh
+
+      - name: Reset SQL
+        working-directory: staging-reset
+        env:
+          STAGING_RESET_TEST_PG: postgresql://postgres:postgres@localhost:5432
+          DB_MIGRATIONS: ${{ github.workspace }}/services/db/src/main/resources/db/migration
+          YAHOO_MIGRATIONS: ${{ github.workspace }}/services/yahoo/src/main/resources/db/migration
+          ESPN_MIGRATIONS: ${{ github.workspace }}/services/espn/src/main/resources/db/migration
+        run: python3 -m unittest -v test_staging_reset.py
+
+  reset:
+    name: Reset staging
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install bcrypt
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet 'bcrypt==4.3.0'
+
+      # The staging-reset key can do one thing: run SQL against staging's db-, yahoo- and
+      # espn-service databases, after backing up their user tables (staging_reset_forced.sh).
+      - name: Reset staging
+        env:
+          RESET_KEY: ${{ secrets.STAGING_RESET_SSH_KEY }}
+          STAGING_PREMIUM_PASSWORD: ${{ secrets.STAGING_PREMIUM_PASSWORD }}
+          STAGING_FREE_PASSWORD: ${{ secrets.STAGING_FREE_PASSWORD }}
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+          STAGING_ADMIN_EMAIL: ${{ secrets.STAGING_ADMIN_EMAIL }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+        run: |
+          if [ -z "$RESET_KEY" ]; then
+            echo "::error::Secret STAGING_RESET_SSH_KEY is not set — see staging-reset-setup.md."
+            exit 1
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$RESET_KEY" > ~/.ssh/id_staging_reset
+          chmod 600 ~/.ssh/id_staging_reset
+          printf '%s\n' '62.238.17.178 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH9wW3pT4VmX2Y3ny5//zQUa/JFR/6l8b7WGQ70Jhsqh' > ~/.ssh/known_hosts
+          STAGING_RESET_KEY_FILE=~/.ssh/id_staging_reset STAGING_KNOWN_HOSTS=~/.ssh/known_hosts \
+            .venv/bin/python staging-reset/staging_reset.py
+
+  # The same alarm as the E2E suite's: a red run in the Actions tab goes unread, an issue does not.
+  # One issue per outage; later failures comment on it, and the next green reset closes it. Its own
+  # job, so a test failure that kept the reset from starting raises it too.
+  report:
+    name: Report
+    needs: [test, reset]
+    if: always() && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stand down the alarm
+        if: needs.reset.result == 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          open=$(gh issue list -R "$GITHUB_REPOSITORY" --label staging-reset-red --state open --limit 1 --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            gh issue close -R "$GITHUB_REPOSITORY" "$open" --comment "Green again — [run]($RUN_URL)."
+          fi
+
+      - name: Raise the alarm
+        if: needs.test.result != 'success' || needs.reset.result != 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create -R "$GITHUB_REPOSITORY" staging-reset-red --color B60205 \
+            --description "The nightly staging reset is failing" 2>/dev/null || true
+          open=$(gh issue list -R "$GITHUB_REPOSITORY" --label staging-reset-red --state open --limit 1 --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            gh issue comment -R "$GITHUB_REPOSITORY" "$open" --body "Still failing — [run]($RUN_URL)."
+            exit 0
+          fi
+          {
+            echo "The nightly staging reset failed, so staging is not at its baseline and the E2E run after it may be testing leftovers."
+            echo
+            echo "- Run: $RUN_URL"
+            echo
+            echo "A step that failed rolled back its own database. The steps run db → yahoo → espn, so a failure after db leaves only orphan rows, which the next green run removes."
+            echo "Backups taken before each step are on the staging server; see staging-reset-setup.md."
+          } > reset-failure.md
+          gh issue create -R "$GITHUB_REPOSITORY" --title "The nightly staging reset is failing" --label staging-reset-red --body-file reset-failure.md
