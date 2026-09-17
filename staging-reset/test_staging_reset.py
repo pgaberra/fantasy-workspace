@@ -71,8 +71,8 @@ class SqlBuilders(unittest.TestCase):
             reset.yahoo_sql(["1'); DROP TABLE skaters; --"])
 
     def test_splits_the_summary_from_the_ids(self):
-        summary, ids = reset.parse_db_output("deleted 4\n\nabc\ndef\n")
-        self.assertEqual(summary, ["deleted 4"])
+        summary, ids = reset.parse_db_output("deleted 4\nadmin kept 1\n\nabc\ndef\n")
+        self.assertEqual(summary, ["deleted 4", "admin kept 1"])
         self.assertEqual(ids, ["abc", "def"])
 
 
@@ -113,14 +113,14 @@ class AgainstMigratedSchemas(unittest.TestCase):
         return user_id
 
     def run_reset(self) -> list[str]:
-        summary, ids = reset.parse_db_output(psql("reset_db", reset.db_sql(seeds())))
+        summary, ids = reset.parse_db_output(psql("reset_db", reset.db_sql(seeds(), " Admin@Example.com")))
         psql("reset_yahoo", reset.yahoo_sql(ids))
         psql("reset_espn", reset.espn_sql(ids))
         self.summary = summary
         return ids
 
-    def test_leaves_only_the_seeds_and_the_service_account(self):
-        self.add_user("someone@example.com")
+    def test_leaves_the_seeds_the_admin_and_the_service_account(self):
+        admin = self.add_user("admin@example.com")
         self.add_user("e2e-hp-1789@slapstat.com")
         self.add_user("e2e@slapstat.com")  # the E2E account as sign-up made it, with another id
         psql("reset_yahoo", f"""
@@ -130,22 +130,30 @@ class AgainstMigratedSchemas(unittest.TestCase):
 
         ids = self.run_reset()
 
-        self.assertEqual(sorted(ids), sorted([reset.PREMIUM_ID, reset.FREE_ID, reset.E2E_ID]))
-        self.assertIn("deleted 3", self.summary)
+        self.assertEqual(sorted(ids), sorted([admin, reset.PREMIUM_ID, reset.FREE_ID, reset.E2E_ID]))
+        self.assertEqual(self.summary, ["deleted 2", "admin kept 1"])
+        # The admin account is untouched: its own rows stay, everyone else's are gone.
         for table in ("subscriptions", "pending_checkouts", "password_reset_tokens",
                       "email_verification_tokens", "projection_shares", "user_avatars"):
-            self.assertEqual(psql("reset_db", f"SELECT count(*) FROM {table};").strip(), "0", table)
+            self.assertEqual(psql("reset_db", f"SELECT user_id FROM {table};").split(), [admin], table)
         self.assertEqual(
-            psql("reset_db", "SELECT user_id FROM premium_grants;").strip(),
-            reset.PREMIUM_ID,
+            sorted(psql("reset_db", "SELECT user_id FROM premium_grants;").split()),
+            sorted([admin, reset.PREMIUM_ID]),
         )
         self.assertEqual(
             psql("reset_db", "SELECT email FROM users WHERE id = '%s';" % reset.E2E_ID).strip(),
             "e2e@slapstat.com",
         )
         yahoo = psql("reset_yahoo", "SELECT app_user_id FROM yahoo_oauth_tokens;").split()
-        self.assertEqual(yahoo, [reset.YAHOO_SERVICE_ACCOUNT])
-        self.assertEqual(psql("reset_espn", "SELECT count(*) FROM espn_credentials;").strip(), "0")
+        self.assertEqual(sorted(yahoo), sorted([reset.YAHOO_SERVICE_ACCOUNT, admin]))
+        self.assertEqual(psql("reset_espn", "SELECT app_user_id FROM espn_credentials;").split(), [admin])
+
+    def test_an_admin_address_that_names_a_seed_does_not_keep_it(self):
+        summary, ids = reset.parse_db_output(
+            psql("reset_db", reset.db_sql(seeds(), "premium-test@slapstat.com"))
+        )
+        self.assertIn("admin kept 0", summary)
+        self.assertEqual(len(ids), 3)
 
     def test_seeds_a_draft_only_where_a_draft_belongs(self):
         self.run_reset()
@@ -165,6 +173,7 @@ class AgainstMigratedSchemas(unittest.TestCase):
         second = self.run_reset()
         self.assertEqual(first, second)
         self.assertIn("deleted 3", self.summary)
+        self.assertIn("admin kept 0", self.summary)
         self.assertEqual(psql("reset_db", "SELECT count(*) FROM user_projections;").strip(), "4")
         self.assertEqual(psql("reset_db", "SELECT count(*) FROM premium_grants;").strip(), "1")
 

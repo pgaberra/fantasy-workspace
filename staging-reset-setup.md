@@ -11,11 +11,15 @@ pgaberra/fantasy-db-service#45.
 | `premium-test@slapstat.com` (username `premium_tester`) | `STAGING_PREMIUM_PASSWORD` | Premium (an admin grant, no subscription), "Category league" and "Points league" projections, and a Last Season's Stats draft set up for 12 teams with no picks |
 | `free-test@slapstat.com` (username `free_tester`) | `STAGING_FREE_PASSWORD` | No Premium, one "Points league" projection |
 | the E2E account (`E2E_EMAIL`) | `E2E_PASSWORD` | Nothing, like a fresh sign-up; the E2E specs expect that |
+| the admin account (`STAGING_ADMIN_EMAIL`) | its own | **Untouched**: projections, Premium, Yahoo link and ESPN cookies all stay. Admin rights come from `ADMIN_EMAILS` on staging's BFF, not from here |
 
-These three are the only accounts on staging after a reset, yours included: an account made for
-anything else is gone the next morning. All three are recreated from scratch every night, with the
-same ids, verified emails and passwords set from the secrets, so whatever was done to them during
-the day is gone too, a changed password included.
+These four are the only accounts on staging after a reset: an account made for anything else is
+gone the next morning. The admin account is kept rather than recreated, because its Yahoo link is
+stored against its id and would not survive a new one; if it does not exist, the run warns and
+carries on, and signing up with that address once brings it back for good. The three seeded
+accounts are recreated from scratch every night, with the same ids, verified emails and passwords
+set from the secrets, so whatever was done to them during the day is gone too, a changed password
+included.
 
 Every other account is deleted along with everything it owned, in db-service (projections, shares,
 subscriptions, pending checkouts, grants, avatars, tokens), yahoo-service (OAuth tokens and pending
@@ -60,6 +64,7 @@ its sha256 against `git show origin/master:staging_reset_forced.sh | sha256sum`,
 | `STAGING_RESET_SSH_KEY` | step 1 |
 | `STAGING_PREMIUM_PASSWORD`, `STAGING_FREE_PASSWORD` | new passwords, kept in your password manager |
 | `E2E_EMAIL`, `E2E_PASSWORD` | the same values as in `fantasy-web`, or the E2E sign-in breaks the morning after |
+| `STAGING_ADMIN_EMAIL` | the admin account's address, kept out of the code because the repo is public |
 
 The run refuses to start while any of these is empty.
 
@@ -67,7 +72,7 @@ The run refuses to start while any of these is empty.
 
 Dispatch **Actions → Staging reset → Run workflow**, then check that:
 
-- the run is green and prints `deleted N, 3 seeded`;
+- the run is green and prints `deleted N, admin kept 1, 3 seeded`;
 - you can sign in to staging as both test accounts, and the premium account shows Premium;
 - the E2E run at 06:00 the next morning is green.
 
