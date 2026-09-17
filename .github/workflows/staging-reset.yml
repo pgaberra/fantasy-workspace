@@ -109,11 +109,13 @@ jobs:
 
   # The same alarm as the E2E suite's: a red run in the Actions tab goes unread, an issue does not.
   # One issue per outage; later failures comment on it, and the next green reset closes it. Its own
-  # job, so a test failure that kept the reset from starting raises it too.
+  # job, so a test failure that kept the reset from starting raises it too. Master only: a reset
+  # dispatched from a branch is someone trying a change out, and its result is theirs to read, not
+  # a verdict on the nightly run.
   report:
     name: Report
     needs: [test, reset]
-    if: always() && github.event_name != 'pull_request'
+    if: always() && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
       - name: Stand down the alarm
