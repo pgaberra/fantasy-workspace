@@ -44,7 +44,7 @@ See `README.md` for scoring guidance.
 
 **Proposed:** small edit — *Build your rankings.*
 
-**Because:** The draft board is Draft mode's own screen. What a reader builds before signing up is a projection and its rankings, and the line below already covers draft day.
+**Because:** The draft board is Draft Mode's own screen. What a reader builds before signing up is a projection and its rankings, and the line below already covers draft day.
 
 **Yours:** ok  
 **Why:**
@@ -126,9 +126,9 @@ See `README.md` for scoring guidance.
 
 > Live draft board and post-draft rankings
 
-**Proposed:** small edit — *Draft mode and post-draft team rankings*
+**Proposed:** small edit — *Draft Mode and post-draft team rankings*
 
-**Because:** `Draft mode` is the feature's name, and "live draft" is on the avoid list. "Rankings" alone reads as player rankings; these rank the teams.
+**Because:** `Draft Mode` is the feature's name, and "live draft" is on the avoid list. "Rankings" alone reads as player rankings; these rank the teams.
 
 **Yours:** ok  
 **Why:**

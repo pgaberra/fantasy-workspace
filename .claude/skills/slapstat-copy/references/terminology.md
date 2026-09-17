@@ -2,6 +2,11 @@
 
 Use the canonical term for each product concept. Do not introduce synonyms for the same concept unless they refer to something genuinely different.
 
+The casing of a name is **checked by a machine**, case-sensitively, from
+`fantasy-web/COPY-RULES.md` — that file is the authority for how *Draft Mode*, *My Projections*,
+*Who's Hot* and *SlapStat* are spelled, and a table here that disagreed with it once sent a
+reviewer to rewrite copy that CI required.
+
 ## Canonical terms
 
 | Concept | Use | Avoid |
