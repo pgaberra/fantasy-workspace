@@ -52,8 +52,17 @@ carries an iptables time match that stops it matching after 90 minutes, so a run
 before `revoke` does not leave a door open; every call to the script sweeps expired rules. Running
 `lock` while a suite is running shuts that runner out and reddens the run.
 
-Anything else that has to reach staging from outside is shut out while it is locked. That covers
-Sentry's uptime check (disabled for staging for that reason) and Stripe's test-mode webhooks to
-`api.staging.slapstat.com`.
+Anything else that has to reach staging from outside is shut out while it is locked, unless its
+addresses are in `/root/ip-allowlist.extra`. Sentry's uptime check is not there: it was moved to
+production instead.
+
+## Services let through the lock
+
+`ip-allowlist.sh` (versioned here, installed as `/root/ip-allowlist.sh`) also lets through every
+IPv4 in `/root/ip-allowlist.extra`, installed from `ip-allowlist.staging.extra`. Today that is
+Stripe's webhook senders, so test-mode webhooks reach `api.staging.slapstat.com`. The rules are
+re-applied on boot and on every `lock`. After changing the file, run `/root/ip-allowlist.sh` on the
+box or `lock` from the workflow. A file with a line that is not an IPv4 address is refused before
+any rule is touched.
 
 > The workflow pins the staging server's SSH host key, so no blind trust-on-first-use.
