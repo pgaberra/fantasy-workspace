@@ -3,6 +3,8 @@
 # to LF regardless of core.autocrlf.
 *.sh text eol=lf
 *.conf text eol=lf
+# Read line by line by ip-allowlist.sh, which refuses a line ending in a CR as not an address.
+*.extra text eol=lf
 
 # systemd units are copied to the servers the same way and read the same way; a CR at the
 # end of an ExecStart path is part of the path as far as systemd is concerned.
