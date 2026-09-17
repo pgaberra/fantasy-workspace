@@ -53,8 +53,8 @@ before `revoke` does not leave a door open; every call to the script sweeps expi
 `lock` while a suite is running shuts that runner out and reddens the run.
 
 Anything else that has to reach staging from outside is shut out while it is locked, unless its
-addresses are in `/root/ip-allowlist.extra`. Sentry's uptime check is not there: it was moved to
-production instead.
+addresses are in `/root/ip-allowlist.extra`. No external uptime check watches staging for that
+reason; Sentry's, which did, is disabled, and UptimeRobot watches production.
 
 ## Services let through the lock
 
