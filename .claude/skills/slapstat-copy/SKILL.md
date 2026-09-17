@@ -16,7 +16,7 @@ SlapStat is a fantasy hockey tool.
 - Users create projections and rank NHL players using their league's scoring settings.
 - Points leagues and category leagues are supported. Category rankings use Z-Score.
 - League settings can be imported from Yahoo or ESPN.
-- Draft mode is a live draft board with post-draft team rankings.
+- Draft Mode is a live draft board with post-draft team rankings.
 - Who's Hot shows player production over a selected game range.
 - Projections can be shared as read-only links.
 - The app is free. Premium is a monthly subscription.
