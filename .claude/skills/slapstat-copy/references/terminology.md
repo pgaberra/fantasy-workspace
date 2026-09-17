@@ -11,13 +11,13 @@ Use the canonical term for each product concept. Do not introduce synonyms for t
 | The league's categories or point values | **scoring settings** | scoring system, scoring format |
 | The values configured for a league | **league settings** | league config |
 | The event | **draft** | drafting session |
-| The live drafting feature | **Draft mode** | draft board mode, live draft |
-| The live board inside Draft mode | **the draft board** | the board |
+| The live drafting feature | **Draft Mode** | draft board mode, live draft |
+| The live board inside Draft Mode | **the draft board** | the board |
 | Games a skater appeared in | **games played** | GP outside table headers |
 | Games a goalie started | **games started** | starts, GS outside table headers |
 | The paid membership | **Premium** | Pro, Plus, premium tier, premium plan |
 
-`draft board` is a real object inside Draft mode. Do not use `board` as a general synonym for a projection or its rankings.
+`draft board` is a real object inside Draft Mode. Do not use `board` as a general synonym for a projection or its rankings.
 
 `league setup` is fine as a UI heading. Use `league settings` when referring to the actual settings themselves.
 
@@ -34,6 +34,7 @@ Use the canonical term for each product concept. Do not introduce synonyms for t
 | **share link** | A read-only link to a projection snapshot. |
 | **skater**, **goalie** | Use instead of "netminder". Use forward or defenseman only when the position matters. |
 | **points league**, **category league** | Lowercase. |
+| **My Projections** | The projections page. Title case, like Who's Hot and Draft Mode. |
 | **games played** | Use in prose instead of GP. |
 | **games started** | Use in prose instead of GS. |
 | **dressed for** | Natural phrasing for games a player actually appeared in. |

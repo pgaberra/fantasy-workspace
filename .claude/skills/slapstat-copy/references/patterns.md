@@ -52,7 +52,7 @@ Write feature cards as a set. Keep them parallel in tone and length.
 > **Get your draft board ready.** Create a free account to save your projections and take them to draft day.
 
 ### After
-> **Get your draft board ready.** Create a free account to keep your projections and use them in Draft mode.
+> **Get your draft board ready.** Create a free account to keep your projections and use them in Draft Mode.
 
 **Pattern:** The body should add information rather than repeat the heading.
 
@@ -131,7 +131,7 @@ A heading should tell the reader what the section contains.
 
 ## Buttons
 
-Use a short verb phrase in sentence case. Name the object when needed to make the action clear.
+Use a short verb phrase in sentence case. Navigation and footer links are the exception: title case (*Send Feedback*, *Sign In*). Name the object when needed to make the action clear.
 
 **Prefer**
 > Create projection  
@@ -369,7 +369,7 @@ These short pairs reinforce the preferred register.
 > After: See which players have performed best over the selected range using your league's scoring settings.
 
 > Before: Your copy of this board lives in your account, so log in or create an account to draft against it. Free to start, and this carries on where you left off.  
-> After: Save a copy to your account to keep editing it or use it in Draft mode.
+> After: Save a copy to your account to keep editing it or use it in Draft Mode.
 
 > Before: Projected for fewer games than the league's goalie minimum, so this goalie is ranked last.  
 > After: Projected below the league minimum in games played.
