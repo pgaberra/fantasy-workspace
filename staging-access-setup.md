@@ -42,4 +42,18 @@ comment in the script).
 `open` (reach staging from anywhere) or `lock` (restore the owner-IP gate). Works from the
 GitHub mobile app / browser too.
 
+**Locked is the default.** Leave staging on `lock` except for a short `open` window.
+
+## The E2E suite gets through on its own
+
+`E2E (staging)` in `fantasy-web` uses the same key to call `allow` before the tests and `revoke`
+after them. The server lets in only the IP the SSH connection came from, over HTTPS, and the rule
+carries an iptables time match that stops it matching after 90 minutes, so a runner that dies
+before `revoke` does not leave a door open; every call to the script sweeps expired rules. Running
+`lock` while a suite is running shuts that runner out and reddens the run.
+
+Anything else that has to reach staging from outside is shut out while it is locked. That covers
+Sentry's uptime check (disabled for staging for that reason) and Stripe's test-mode webhooks to
+`api.staging.slapstat.com`.
+
 > The workflow pins the staging server's SSH host key, so no blind trust-on-first-use.
