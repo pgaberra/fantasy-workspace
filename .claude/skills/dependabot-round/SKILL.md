@@ -6,7 +6,7 @@ description: The scheduled Dependabot round, run locally by a desktop-app schedu
 # dependabot-round
 
 **Goal:** a Dependabot PR never waits on a person for the part that needs no judgement. Within a
-few hours of opening, every one in the six service repos is merged once its required check is
+week of opening, every one in the six service repos is merged once its required check is
 green, or has an issue that says why it cannot be.
 
 Until this round existed, every Dependabot merge was a hand-made one, and nearly all of the work
@@ -15,8 +15,8 @@ brought up to date with `master`, wait for CI, and be merged before the next one
 
 ## How it runs
 
-A scheduled task in the Claude desktop app on Alexander's machine, every three hours, on his
-Claude subscription rather than an API key. It runs only while the app is open; a missed run fires
+A scheduled task in the Claude desktop app on Alexander's machine, once a week (Monday 09:00
+Europe/Stockholm), on his Claude subscription rather than an API key. It runs only while the app is open; a missed run fires
 on the next launch. **Every run starts with no memory of the last one**, so everything carried
 between runs lives in GitHub: the open PRs themselves, the issues the round filed (found by their
 marker), and the run log.
@@ -91,7 +91,11 @@ guard enforces the same for every issue the round writes on.
 | `pgaberra/fantasy-projection-service` | `Lint & Test` |
 
 Each has a weekly Dependabot schedule with grouped PRs (`all-dependencies`, `all-security`,
-`all-actions`; projection-service also watches its Docker base image). fantasy-workspace has no
+`all-actions`; projection-service also watches its Docker base image). Dependabot runs Sunday
+22:00 Europe/Stockholm, so its PRs exist before the Monday round, and every version update has a
+seven-day `cooldown`: a release is a week old before it becomes a PR. Security updates ignore the
+cooldown and open whenever an advisory lands, so one can wait up to a week for the round; merge it
+by hand, or run the round from Routines, when it should not. fantasy-workspace has no
 Dependabot and no CI. Other repos on the account are not this round's.
 
 ## Each run
@@ -123,8 +127,8 @@ Dependabot and no CI. Other repos on the account are not this round's.
      someone else has pushed to. Leave it for the next run; do not comment again on a later run
      unless the head commit has changed since.
    - **`DRAFT`** or `isDraft`: skip it.
-5. Stop starting new work after about an hour. What is left is the next run's, and the run log
-   says what.
+5. Stop starting new work after about two hours. The next run is a week away, so the run log
+   names exactly what was left and why.
 
 ### A red PR
 
