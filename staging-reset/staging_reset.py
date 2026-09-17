@@ -1,4 +1,4 @@
-"""Put staging's user data back to a fixed baseline: three seeded accounts plus a short keep-list.
+"""Put staging's user data back to a fixed baseline: three seeded accounts and nothing else.
 
 Run nightly by the "Staging reset" workflow (.github/workflows/staging-reset.yml); setup and restore
 steps are in staging-reset-setup.md. Everything else a tester, an E2E run or an agent left behind
@@ -116,26 +116,17 @@ def load_fixture(name: str, kind: str) -> tuple[str, str, str]:
     return fixture["season"], fixture["playerIdSpace"], json.dumps(data, separators=(",", ":"))
 
 
-def db_sql(keep_emails: list[str], seeds: list[SeedUser]) -> str:
-    """db-service. Prints `deleted <n>`, `kept <n>`, then every surviving user id, one per line."""
-    seed_emails = {seed.email.lower() for seed in seeds}
-    keep = sorted({email.strip().lower() for email in keep_emails} - seed_emails - {""})
-    keep_array = "ARRAY[" + ",".join(literal(e) for e in keep) + "]::text[]"
-
+def db_sql(seeds: list[SeedUser]) -> str:
+    """db-service. Prints `deleted <n>`, then every user id after the reset, one per line."""
     lines = [
-        # Seeds are always recreated, so a seed address on the keep-list is ignored above.
-        "CREATE TEMP TABLE keep_user ON COMMIT DROP AS",
-        f"  SELECT id FROM users WHERE lower(email) = ANY ({keep_array})",
-        "    AND id NOT IN (" + ",".join(literal(s.id) for s in seeds) + ");",
+        # Every account goes, the seeds included: they are recreated below from scratch.
         # The four tables whose foreign key to users does not cascade go first. A fifth added
         # later makes the delete from users fail, which is the alarm that it has to be listed.
-        "DELETE FROM password_reset_tokens WHERE user_id NOT IN (SELECT id FROM keep_user);",
-        "DELETE FROM email_verification_tokens WHERE user_id NOT IN (SELECT id FROM keep_user);",
-        "DELETE FROM subscriptions WHERE user_id NOT IN (SELECT id FROM keep_user);",
-        "DELETE FROM pending_checkouts WHERE user_id NOT IN (SELECT id FROM keep_user);",
-        "WITH gone AS (DELETE FROM users WHERE id NOT IN (SELECT id FROM keep_user) RETURNING 1)",
-        "  SELECT 'deleted ' || count(*) FROM gone;",
-        "SELECT 'kept ' || count(*) FROM keep_user;",
+        "DELETE FROM password_reset_tokens;",
+        "DELETE FROM email_verification_tokens;",
+        "DELETE FROM subscriptions;",
+        "DELETE FROM pending_checkouts;",
+        "WITH gone AS (DELETE FROM users RETURNING 1) SELECT 'deleted ' || count(*) FROM gone;",
     ]
     for seed in seeds:
         lines.append(
@@ -184,9 +175,9 @@ def espn_sql(user_ids: list[str]) -> str:
 
 
 def parse_db_output(output: str) -> tuple[list[str], list[str]]:
-    """(the summary lines, the surviving user ids)."""
+    """(the summary lines, the user ids after the reset)."""
     lines = [line for line in output.splitlines() if line.strip()]
-    summary = [line for line in lines if line.startswith(("deleted ", "kept "))]
+    summary = [line for line in lines if line.startswith("deleted ")]
     ids = [line for line in lines if line not in summary]
     return summary, ids
 
@@ -229,17 +220,13 @@ def main() -> None:
         e2e_email=require("E2E_EMAIL").strip(),
         e2e_hash=hash_password(require("E2E_PASSWORD")),
     )
-    # Required even though an empty list is a valid wish: a secret that went missing must not
-    # read as "delete Alexander's own accounts too".
-    keep_emails = re.split(r"[,\s]+", require("STAGING_RESET_KEEP_EMAILS"))
-
-    summary, user_ids = parse_db_output(ssh_step("db", db_sql(keep_emails, seeds)))
+    summary, user_ids = parse_db_output(ssh_step("db", db_sql(seeds)))
     # Counts only: the log of a public repo is no place for addresses or account ids.
-    print("db-service: " + ", ".join(summary) + f", {len(seeds)} seeded")
+    print("db-service: " + ", ".join(summary) + f", {len(user_ids)} seeded")
     ssh_step("yahoo", yahoo_sql(user_ids))
-    print("yahoo-service: per-user rows outside the surviving accounts removed")
+    print("yahoo-service: per-user rows outside the seeded accounts removed")
     ssh_step("espn", espn_sql(user_ids))
-    print("espn-service: per-user rows outside the surviving accounts removed")
+    print("espn-service: per-user rows outside the seeded accounts removed")
 
 
 if __name__ == "__main__":

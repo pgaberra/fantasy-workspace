@@ -1,7 +1,7 @@
 name: Staging reset
 
-# Puts staging's user data back to a fixed baseline every night: a premium and a free test account,
-# the E2E account, and the accounts on the keep-list. Everything else testing left behind goes.
+# Puts staging's user data back to a fixed baseline every night: a premium and a free test account
+# and the E2E account, recreated from scratch. Every other account goes.
 # What survives and how to restore a backup: staging-reset-setup.md.
 on:
   schedule:
@@ -89,7 +89,6 @@ jobs:
       - name: Reset staging
         env:
           RESET_KEY: ${{ secrets.STAGING_RESET_SSH_KEY }}
-          STAGING_RESET_KEEP_EMAILS: ${{ secrets.STAGING_RESET_KEEP_EMAILS }}
           STAGING_PREMIUM_PASSWORD: ${{ secrets.STAGING_PREMIUM_PASSWORD }}
           STAGING_FREE_PASSWORD: ${{ secrets.STAGING_FREE_PASSWORD }}
           E2E_EMAIL: ${{ secrets.E2E_EMAIL }}

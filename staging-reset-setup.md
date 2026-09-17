@@ -11,11 +11,11 @@ pgaberra/fantasy-db-service#45.
 | `premium-test@slapstat.com` (username `premium_tester`) | `STAGING_PREMIUM_PASSWORD` | Premium (an admin grant, no subscription), "Category league" and "Points league" projections, and a Last Season's Stats draft set up for 12 teams with no picks |
 | `free-test@slapstat.com` (username `free_tester`) | `STAGING_FREE_PASSWORD` | No Premium, one "Points league" projection |
 | the E2E account (`E2E_EMAIL`) | `E2E_PASSWORD` | Nothing, like a fresh sign-up; the E2E specs expect that |
-| every address in `STAGING_RESET_KEEP_EMAILS` | — | **Untouched**: projections, subscription, Yahoo link, ESPN cookies all stay |
 
-All three seeded accounts are recreated from scratch every night, with the same ids, verified
-emails and passwords set from the secrets. Anything done to them during the day is gone the next
-morning, including a changed password.
+These three are the only accounts on staging after a reset, yours included: an account made for
+anything else is gone the next morning. All three are recreated from scratch every night, with the
+same ids, verified emails and passwords set from the secrets, so whatever was done to them during
+the day is gone too, a changed password included.
 
 Every other account is deleted along with everything it owned, in db-service (projections, shares,
 subscriptions, pending checkouts, grants, avatars, tokens), yahoo-service (OAuth tokens and pending
@@ -60,17 +60,14 @@ its sha256 against `git show origin/master:staging_reset_forced.sh | sha256sum`,
 | `STAGING_RESET_SSH_KEY` | step 1 |
 | `STAGING_PREMIUM_PASSWORD`, `STAGING_FREE_PASSWORD` | new passwords, kept in your password manager |
 | `E2E_EMAIL`, `E2E_PASSWORD` | the same values as in `fantasy-web`, or the E2E sign-in breaks the morning after |
-| `STAGING_RESET_KEEP_EMAILS` | the addresses to keep, separated by commas or spaces |
 
-The run refuses to start while any of these is empty, **including the keep-list**, so a secret that
-went missing can never delete your own accounts. Kept addresses live in a secret rather than in
-this file because the repo is public.
+The run refuses to start while any of these is empty.
 
 ### 4. First run
 
 Dispatch **Actions → Staging reset → Run workflow**, then check that:
 
-- the run is green and prints `deleted N, kept M`, with M matching the number of your accounts on staging;
+- the run is green and prints `deleted N, 3 seeded`;
 - you can sign in to staging as both test accounts, and the premium account shows Premium;
 - the E2E run at 06:00 the next morning is green.
 

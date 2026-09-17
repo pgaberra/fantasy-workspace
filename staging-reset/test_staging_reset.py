@@ -70,16 +70,9 @@ class SqlBuilders(unittest.TestCase):
         with self.assertRaises(ValueError):
             reset.yahoo_sql(["1'); DROP TABLE skaters; --"])
 
-    def test_a_seed_address_on_the_keep_list_is_still_recreated(self):
-        sql = reset.db_sql(["PREMIUM-TEST@slapstat.com", "me@example.com"], seeds())
-        self.assertNotIn("'premium-test@slapstat.com'::", sql)
-        keep_line = next(line for line in sql.splitlines() if "= ANY" in line)
-        self.assertIn("'me@example.com'", keep_line)
-        self.assertNotIn("premium-test", keep_line)
-
     def test_splits_the_summary_from_the_ids(self):
-        summary, ids = reset.parse_db_output("deleted 4\nkept 1\n\nabc\ndef\n")
-        self.assertEqual(summary, ["deleted 4", "kept 1"])
+        summary, ids = reset.parse_db_output("deleted 4\n\nabc\ndef\n")
+        self.assertEqual(summary, ["deleted 4"])
         self.assertEqual(ids, ["abc", "def"])
 
 
@@ -119,15 +112,15 @@ class AgainstMigratedSchemas(unittest.TestCase):
         """)
         return user_id
 
-    def run_reset(self, keep_emails: list[str]) -> list[str]:
-        summary, ids = reset.parse_db_output(psql("reset_db", reset.db_sql(keep_emails, seeds())))
+    def run_reset(self) -> list[str]:
+        summary, ids = reset.parse_db_output(psql("reset_db", reset.db_sql(seeds())))
         psql("reset_yahoo", reset.yahoo_sql(ids))
         psql("reset_espn", reset.espn_sql(ids))
         self.summary = summary
         return ids
 
-    def test_leaves_the_seeds_the_keep_list_and_the_service_account(self):
-        mine = self.add_user("Me@Example.com")
+    def test_leaves_only_the_seeds_and_the_service_account(self):
+        self.add_user("someone@example.com")
         self.add_user("e2e-hp-1789@slapstat.com")
         self.add_user("e2e@slapstat.com")  # the E2E account as sign-up made it, with another id
         psql("reset_yahoo", f"""
@@ -135,29 +128,27 @@ class AgainstMigratedSchemas(unittest.TestCase):
               VALUES ('{reset.YAHOO_SERVICE_ACCOUNT}', 'a', 'r', now(), now(), now());
         """)
 
-        ids = self.run_reset(["me@example.com", "nobody@example.com"])
+        ids = self.run_reset()
 
-        self.assertEqual(sorted(ids), sorted([mine, reset.PREMIUM_ID, reset.FREE_ID, reset.E2E_ID]))
-        self.assertIn("kept 1", self.summary)
-        # The kept account is untouched, subscription and all.
-        self.assertEqual(psql("reset_db", f"SELECT count(*) FROM subscriptions WHERE user_id = '{mine}';").strip(), "1")
-        self.assertEqual(psql("reset_db", "SELECT count(*) FROM subscriptions;").strip(), "1")
-        self.assertEqual(psql("reset_db", "SELECT count(*) FROM pending_checkouts;").strip(), "1")
+        self.assertEqual(sorted(ids), sorted([reset.PREMIUM_ID, reset.FREE_ID, reset.E2E_ID]))
+        self.assertIn("deleted 3", self.summary)
+        for table in ("subscriptions", "pending_checkouts", "password_reset_tokens",
+                      "email_verification_tokens", "projection_shares", "user_avatars"):
+            self.assertEqual(psql("reset_db", f"SELECT count(*) FROM {table};").strip(), "0", table)
         self.assertEqual(
-            psql("reset_db", "SELECT user_id FROM premium_grants WHERE granted_by = 'staging-reset';").strip(),
+            psql("reset_db", "SELECT user_id FROM premium_grants;").strip(),
             reset.PREMIUM_ID,
         )
         self.assertEqual(
             psql("reset_db", "SELECT email FROM users WHERE id = '%s';" % reset.E2E_ID).strip(),
             "e2e@slapstat.com",
         )
-        yahoo = psql("reset_yahoo", "SELECT app_user_id FROM yahoo_oauth_tokens ORDER BY 1;").split()
-        self.assertEqual(sorted(yahoo), sorted([reset.YAHOO_SERVICE_ACCOUNT, mine]))
-        espn = psql("reset_espn", "SELECT app_user_id FROM espn_credentials;").split()
-        self.assertEqual(espn, [mine])
+        yahoo = psql("reset_yahoo", "SELECT app_user_id FROM yahoo_oauth_tokens;").split()
+        self.assertEqual(yahoo, [reset.YAHOO_SERVICE_ACCOUNT])
+        self.assertEqual(psql("reset_espn", "SELECT count(*) FROM espn_credentials;").strip(), "0")
 
     def test_seeds_a_draft_only_where_a_draft_belongs(self):
-        self.run_reset([])
+        self.run_reset()
         rows = psql("reset_db", f"""
             SELECT u.username || '|' || p.kind || '|' || coalesce(p.preset, '-') || '|' || (p.data ? 'draft')
                    || '|' || jsonb_array_length(p.data -> 'players')::text
@@ -170,8 +161,8 @@ class AgainstMigratedSchemas(unittest.TestCase):
         self.assertIn("premium_tester|PROJECTION|-|false|1587", rows)
 
     def test_running_twice_gives_the_same_baseline(self):
-        first = self.run_reset([])
-        second = self.run_reset([])
+        first = self.run_reset()
+        second = self.run_reset()
         self.assertEqual(first, second)
         self.assertIn("deleted 3", self.summary)
         self.assertEqual(psql("reset_db", "SELECT count(*) FROM user_projections;").strip(), "4")
