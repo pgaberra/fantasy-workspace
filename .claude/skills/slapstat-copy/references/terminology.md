@@ -36,7 +36,7 @@ reviewer to rewrite copy that CI required.
 | **roster slots** | Use when referring to the positions available on a roster. |
 | **league size** | Number of teams in the league. |
 | **sync**, **re-sync** | Use for pulling league settings from Yahoo or ESPN. A projection can be "out of sync". |
-| **share link** | A read-only link to a projection snapshot. |
+| **share link** | A read-only link to a projection. It follows the projection: every saved change shows up on it. Not a "snapshot". |
 | **skater**, **goalie** | Use instead of "netminder". Use forward or defenseman only when the position matters. |
 | **points league**, **category league** | Lowercase. |
 | **My Projections** | The projections page. Title case, like Who's Hot and Draft Mode. |
