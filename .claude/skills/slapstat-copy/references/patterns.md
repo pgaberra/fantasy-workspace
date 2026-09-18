@@ -294,7 +294,7 @@ The title should name the action or question. The body should carry the conseque
 
 > Anyone with this link can see your top 200 players and the scoring settings they were ranked under. Your email is never shown.
 
-> It's a snapshot: what you share stays as it is until you update it.
+> The link updates as your changes are saved.
 
 > Changing this setting will take this projection out of sync with your Yahoo league. If the settings changed in Yahoo, re-sync to pull the latest instead.
 
