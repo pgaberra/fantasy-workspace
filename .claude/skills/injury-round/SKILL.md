@@ -19,8 +19,8 @@ suspension in September 2026), Daily Faceoff lists who is out but never when he 
 has status only, and reading Yahoo's public pages by machine is against its terms. What is left is
 reading the news and writing the date down, and this round does that reading.
 
-Every night `projection injuries` names the top-300 skaters who are out in some source with no
-date, in **one** Sentry warning per run. The nightly sync reads the register **from master**, so a
+Every night `projection injuries` names the top 300 skaters by points and the top 64 goalies by
+projected starts who are out in some source with no date, in **one** Sentry warning per run. The nightly sync reads the register **from master**, so a
 merged register PR counts from the next night without a release.
 
 ## How it runs
@@ -109,13 +109,16 @@ sentence from an article.
      has not run or had nothing to say since, so name its timestamp in the run log.
    - Use the union of the players across environments. Both read the same register.
 
-   After a title line and a summary line, each player line reads:
+   After a title line and a summary line, each player line reads, for a skater and a goalie:
 
    ```
    - <name> | nhl_id <id> | <club> | out per: <sources> | #<rank>, <points> pts
+   - <name> | nhl_id <id> | <club> | out per: <sources> | goalie #<rank>, <starts> starts
    ```
 
-   `<sources>` is some of `ESPN (<status>)`, `Daily Faceoff (<status>)` and
+   A skater's rank is among the top 300 by points, a goalie's among the top 64 by starts. The
+   service lists both together, ordered by how deep each sits in its own cut, so the order of the
+   lines is the order that matters. `<sources>` is some of `ESPN (<status>)`, `Daily Faceoff (<status>)` and
    `register (games, no calendar)`. A line that does not parse is skipped and named in the run log.
 
 ### 2. The clone and the branch
@@ -136,7 +139,8 @@ sentence from an article.
 ### 3. Date the listed players
 
 Players already in the register with an active entry are skipped, since step 4 refreshes them.
-Take the rest in rank order, **at most 10 per run**. For each one:
+Take the rest in the order the warning lists them (skaters and goalies together), **at most 10
+per run**. With both environments, keep production's order and add staging's extra players after. For each one:
 
 1. Confirm the id. WebFetch `https://api-web.nhle.com/v1/player/<nhl_id>/landing` and check that
    the NHL's name (`firstName.default` + `lastName.default`) is the listed name. CI checks the same
