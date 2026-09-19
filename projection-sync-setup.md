@@ -1,7 +1,7 @@
 # Projection sync: install on a server
 
 `projection-sync.sh` keeps fantasy-projection-service's store current every night (rosters,
-ingest, lines, injuries, re-projection, and in season the game logs and the club schedules).
+ingest, injuries, lines, re-projection, and in season the game logs and the club schedules).
 Nothing in Coolify or the service schedules it, and
 nothing deploys the files: they are copied onto each server by hand, so **a change merged here is
 not live on a server until someone installs it there.**
