@@ -11,10 +11,8 @@
 #   projection ingest --season <year>    what they played — MoneyPuck + NHL boxcar
 #   projection game-logs --season <year> what they played, game by game — in season only
 #   projection schedule --season <year>  when the season's games fall — in season only
-#   projection lines                     what role they are expected to play, and who each
-#                                        club lists out — Daily Faceoff
-#   projection injuries                  who is hurt right now — ESPN's report, the injury
-#                                        register, and every source resolved per player
+#   projection injuries                  who is hurt right now — ESPN's report
+#   projection lines                     what role they are expected to play — Daily Faceoff
 #   projection project --season <year>   what we think they will do — the model's own output
 #
 # The injuries step is the one that has to run *often* rather than once. It is a snapshot with no
@@ -339,22 +337,17 @@ fi
 run_step "projection schedule --season ${TARGET}" "Scheduled " \
   projection schedule --season "$TARGET"
 
-# Lines before injuries and before the projection, because both read them: the projection reads the
-# lineup, and the injuries step resolves Daily Faceoff's out-of-lineup list (stored by this step)
-# beside ESPN's report and the injury register (projection-service #202). Run the other way round,
-# the injuries step and its nightly report read yesterday's sweep. Its failure is not fatal: the
-# model reads the newest sweep for a fortnight, so a missed night changes nothing a user sees. A
-# sweep that stops for 14 days does - every lineup input switches off at once, and nothing says so -
-# which is why it runs here every night and not by hand.
-run_step "projection lines" "Read " projection lines
-
 # Injuries before the projection, because the projection reads them. Its own failure is not
 # fatal to the run: an injury table one day stale is a smaller error than no re-projection at
 # all, and the model treats a player it knows nothing about as fit, which is what it did before
-# this step existed. It also reads the injury register from the service's master branch and sends
-# one Sentry warning naming the players who matter and are out with no date; that warning is not a
-# failure, and the step's status does not depend on it.
+# this step existed.
 run_step "projection injuries" "ESPN reports " projection injuries
+
+# Lines after injuries and before the projection, because the projection reads them. Its failure is
+# not fatal: the model reads the newest sweep for a fortnight, so a missed night changes nothing a
+# user sees. A sweep that stops for 14 days does - every lineup input switches off at once, and
+# nothing says so - which is why it runs here every night and not by hand.
+run_step "projection lines" "Read " projection lines
 
 # Re-project even if the steps above failed. The model reads the store rather than the fetch, so
 # the worst case is that it reproduces yesterday's numbers — while skipping it after a failed
