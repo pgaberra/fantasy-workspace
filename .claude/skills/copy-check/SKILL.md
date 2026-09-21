@@ -1,6 +1,7 @@
 ---
 name: copy-check
 description: Review every user-facing string a change adds or edits, as its own pass, before the PR is opened. Use after finishing work in the fantasy monorepo that touched any text a SlapStat user reads (a button, a heading, a tooltip, an error, an empty state, a banner, a dialog, an email, a meta tag), and whenever Alexander asks to review the copy in a branch, a diff or a PR. Also use when a PR is open and its copy has not been read as copy. This is the review counterpart to the slapstat-copy skill, which is for writing; run this one on the finished diff.
+disable-model-invocation: true
 ---
 
 # Copy check
