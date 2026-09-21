@@ -1,6 +1,7 @@
 ---
 name: slapstat-copy
 description: Write, review, rewrite and cut every piece of user-facing English text for SlapStat, the fantasy hockey projection and draft tool at slapstat.com. Covers landing page and marketing copy, pricing, buttons and labels, headings, empty states, error messages, tooltips and help text, banners, dialogs, onboarding, email, legal and privacy pages, and page titles and meta tags. Use this skill whenever a string a SlapStat user will read is being written, rewritten, shortened or critiqued, including when the request sounds like a coding task ("add a tooltip for the goalie minimum", "this error message is confusing", "name this button"), when working anywhere in the fantasy monorepo (fantasy-web, fantasy-bff, …), and when the user refers to "min hemsida", "sajten", "landningssidan" or "texten" in a SlapStat context without naming the product. The copy on the site today is being replaced, so this skill also governs any request to review, trim or improve what is already there.
+disable-model-invocation: true
 ---
 
 # SlapStat copy
