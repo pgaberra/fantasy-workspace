@@ -20,3 +20,7 @@
 54.187.174.169
 54.187.205.235
 54.187.216.72
+
+# Alexander's laptop (a second network besides the owner IP in ip-allowlist.sh), added 2026-09-27.
+# If staging times out from it again, its public IP has changed: curl https://api.ipify.org.
+178.174.136.244
