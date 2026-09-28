@@ -191,7 +191,8 @@ git -C <repo> worktree add <path-outside-the-repo>/<short-name> -b <your-branch>
 Put it outside the repo (the session scratchpad is a good home) — clear of the other
 agent's file watcher and build output. Always cut from `origin/master` **explicitly**: a
 bare `git checkout -b` can silently carry another agent's in-flight branch into your PR.
-Remove the worktree when the PR is merged. A fresh `fantasy-web` worktree needs `npm ci`
+Remove the worktree when the PR is merged (the Monday
+[`cleanup-round`](.claude/skills/cleanup-round/SKILL.md) catches what a session left). A fresh `fantasy-web` worktree needs `npm ci`
 and `npm run generate:api` first (`node_modules` and generated `src/app/api` aren't in
 git); Gradle services need nothing extra.
 
