@@ -16,7 +16,7 @@
 # from outside while it is locked (Stripe's webhooks) are listed one IPv4 per line in EXTRA_FILE,
 # installed from ip-allowlist.staging.extra in the monorepo root.
 set -euo pipefail
-ALLOW_IP="${ALLOW_IP:-80.216.235.61}"
+ALLOW_IP="${ALLOW_IP:-83.253.196.104}"
 PORTS="${PORTS:-443}"
 EXTRA_FILE="${EXTRA_FILE:-/root/ip-allowlist.extra}"
 TAG=ip-allowlist
