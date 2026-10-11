@@ -72,10 +72,14 @@ def seed_users(premium_hash: str, free_hash: str, e2e_email: str, e2e_hash: str)
                 SeedProjection("Category league", "category-league.json.gz"),
                 SeedProjection("Points league", "points-league-with-draft.json.gz"),
                 # A draft set up for twelve teams with no picks made, so a draft can be resumed.
+                # Started from a preset, so it has a preset and no source projection. `kind` must
+                # be one of db-service's ProjectionKind values: an unknown one is stored without
+                # complaint and then fails the user's whole projection list (it was PRESET_DRAFT,
+                # which db-service V26 retired, and the premium account's home page answered 500).
                 SeedProjection(
                     "Last Season's Stats",
                     "points-league-with-draft.json.gz",
-                    kind="PRESET_DRAFT",
+                    kind="DRAFT",
                     preset="LAST_SEASON",
                 ),
             ),
@@ -107,11 +111,11 @@ def literal(value: str | None) -> str:
 
 
 def load_fixture(name: str, kind: str) -> tuple[str, str, str]:
-    """(season, player id space, data as JSON text). Only a preset draft keeps its draft."""
+    """(season, player id space, data as JSON text). Only a draft keeps its picks."""
     with gzip.open(FIXTURES / name, "rt", encoding="utf-8") as f:
         fixture = json.load(f)
     data = fixture["data"]
-    if kind != "PRESET_DRAFT":
+    if kind != "DRAFT":
         data.pop("draft", None)
     return fixture["season"], fixture["playerIdSpace"], json.dumps(data, separators=(",", ":"))
 
