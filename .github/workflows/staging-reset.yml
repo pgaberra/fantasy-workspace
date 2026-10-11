@@ -48,7 +48,10 @@ jobs:
         with:
           repository: pgaberra/fantasy-db-service
           path: services/db
-          sparse-checkout: src/main/resources/db/migration
+          # The projection enums too: the seed's kind and preset must be values db-service reads.
+          sparse-checkout: |
+            src/main/resources/db/migration
+            src/main/java/com/fantasy/db/projection
       - uses: actions/checkout@v7
         with:
           repository: pgaberra/fantasy-yahoo-service

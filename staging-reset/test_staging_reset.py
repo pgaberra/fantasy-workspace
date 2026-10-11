@@ -76,6 +76,32 @@ class SqlBuilders(unittest.TestCase):
         self.assertEqual(ids, ["abc", "def"])
 
 
+def enum_constants(java_file: Path) -> set[str]:
+    """The constants of a Java enum, read from its source: `    NAME(` at the start of a line."""
+    return set(re.findall(r"^    ([A-Z][A-Z0-9_]*)\(", java_file.read_text(encoding="utf-8"), re.M))
+
+
+@unittest.skipUnless(MIGRATIONS["db"], "no db-service checkout configured")
+class AgainstDbServiceEnums(unittest.TestCase):
+    """`kind` and `preset` are plain text columns, so the schema accepts any value and only
+    db-service, reading the row back, refuses one it does not know: with a 500 for the whole
+    projection list. The seed once wrote PRESET_DRAFT for weeks after V26 retired it."""
+
+    def setUp(self):
+        # DB_MIGRATIONS is <db-service>/src/main/resources/db/migration.
+        self.source = Path(MIGRATIONS["db"]).parents[2] / "java/com/fantasy/db/projection"
+
+    def test_every_seeded_kind_and_preset_is_one_db_service_reads(self):
+        kinds = enum_constants(self.source / "ProjectionKind.java")
+        presets = enum_constants(self.source / "ProjectionPreset.java")
+        self.assertIn("PROJECTION", kinds)  # the parse found the enum at all
+        for seed in seeds():
+            for projection in seed.projections:
+                self.assertIn(projection.kind, kinds, projection.name)
+                if projection.preset is not None:
+                    self.assertIn(projection.preset, presets, projection.name)
+
+
 @unittest.skipUnless(PG and all(MIGRATIONS.values()), "no test Postgres or migrations configured")
 class AgainstMigratedSchemas(unittest.TestCase):
     def setUp(self):
@@ -164,7 +190,7 @@ class AgainstMigratedSchemas(unittest.TestCase):
         """).split("\n")
         rows = [row for row in rows if row]
         self.assertEqual(len(rows), 4)
-        self.assertIn("premium_tester|PRESET_DRAFT|LAST_SEASON|true|1977", rows)
+        self.assertIn("premium_tester|DRAFT|LAST_SEASON|true|1977", rows)
         self.assertIn("free_tester|PROJECTION|-|false|1977", rows)
         self.assertIn("premium_tester|PROJECTION|-|false|1587", rows)
 
