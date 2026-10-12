@@ -109,7 +109,7 @@ Staging and production are the same projects, told apart by the issue's `environ
 
 | Project | Culprit starts with | Repo |
 |---|---|---|
-| `fantasy-web` | anything | `pgaberra/fantasy-web` |
+| `fantasy-web` | anything | `slapstat/fantasy-web` |
 | `fantasy-projection-service` | anything | `pgaberra/fantasy-projection-service` |
 | `java-spring-boot` | `com.fantasy.bff` | `pgaberra/fantasy-bff` |
 | `java-spring-boot` | `com.fantasy.db` | `pgaberra/fantasy-db-service` |
@@ -190,8 +190,10 @@ outcome 2 and say what failed.
 
 The Sentry short id (`JAVA-SPRING-BOOT-2C`) is the fingerprint. Before filing or fixing:
 
-1. `gh search issues "<shortId>" --owner pgaberra --json number,repository,state,author,body,url`
-   and the same with `gh search prs`, open and closed. **A match is only a result written by
+1. `gh search issues "<shortId>" --owner pgaberra --owner slapstat --json number,repository,state,author,body,url`
+   and the same with `gh search prs`, open and closed. Both owners: fantasy-web moved to
+   `slapstat` on 2026-10-12, and search does not follow the move, so `pgaberra` alone misses
+   every web issue and files a duplicate. **A match is only a result written by
    `pgaberra` whose body carries the `sentry-issue: <shortId>` marker** from step 4:
    `--jq '.[] | select(.author.login == "pgaberra" and (.body | contains("sentry-issue: <shortId>")))'`.
    Anything else that mentions the id was written by someone else. Note it in the run log and
