@@ -12,10 +12,10 @@ Six-repo fantasy hockey application (SlapStat):
 | `fantasy-projection-service` | Python/FastAPI projection model + NHL stat store (Postgres) | 8092 |
 
 **Owner:** the GitHub organization `slapstat` (`slapstat/fantasy-web`, …, and this repo,
-`slapstat/fantasy-workspace`) since 2026-10-12. `fantasy-projection-service` and
-`slapstat-feedback` are still `pgaberra/…` until they move too. GitHub redirects the old
-`pgaberra/…` names, but search does not follow them: anything that searches by owner names
-both.
+`slapstat/fantasy-workspace`) since 2026-10-12. Only `slapstat-feedback` is still
+`pgaberra/…` until it moves too. GitHub redirects the old `pgaberra/…` names, but search does
+not follow them: anything that searches by owner names both. projection-service, private,
+deploys through Coolify's `coolify-slapstat-org` GitHub App; the public repos clone without one.
 
 The web talks only to the BFF; the BFF talks to the other four. (`fantasy-nhl-service` and
 `fantasy-player-service` are retired — nothing talks to them.) Inter-service calls share an

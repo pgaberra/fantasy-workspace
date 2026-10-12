@@ -110,7 +110,7 @@ Staging and production are the same projects, told apart by the issue's `environ
 | Project | Culprit starts with | Repo |
 |---|---|---|
 | `fantasy-web` | anything | `slapstat/fantasy-web` |
-| `fantasy-projection-service` | anything | `pgaberra/fantasy-projection-service` |
+| `fantasy-projection-service` | anything | `slapstat/fantasy-projection-service` |
 | `java-spring-boot` | `com.fantasy.bff` | `slapstat/fantasy-bff` |
 | `java-spring-boot` | `com.fantasy.db` | `slapstat/fantasy-db-service` |
 | `java-spring-boot` | `com.fantasy.yahoo` | `slapstat/fantasy-yahoo-service` |
