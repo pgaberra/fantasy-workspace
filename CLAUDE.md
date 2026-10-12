@@ -11,6 +11,12 @@ Six-repo fantasy hockey application (SlapStat):
 | `fantasy-espn-service` | Spring Boot 4 ESPN integration (leagues via the user's cookies, plus stats Yahoo does not report; Postgres) | 8090 |
 | `fantasy-projection-service` | Python/FastAPI projection model + NHL stat store (Postgres) | 8092 |
 
+**Owner:** the GitHub organization `slapstat` (`slapstat/fantasy-web`, …, and this repo,
+`slapstat/fantasy-workspace`) since 2026-10-12. `fantasy-projection-service` and
+`slapstat-feedback` are still `pgaberra/…` until they move too. GitHub redirects the old
+`pgaberra/…` names, but search does not follow them: anything that searches by owner names
+both.
+
 The web talks only to the BFF; the BFF talks to the other four. (`fantasy-nhl-service` and
 `fantasy-player-service` are retired — nothing talks to them.) Inter-service calls share an
 `X-Internal-Api-Key` header, except yahoo-service's OAuth callback
@@ -164,11 +170,9 @@ including empty and failed runs; a failed run does not move the watermark.
   if `master` moved, merge it into the branch and re-run. The `protect-master` ruleset
   enforces this in the six repos with CI; fantasy-workspace has no CI — there it's on
   whoever merges.
-- **fantasy-web merges through GitHub's merge queue** instead (since 2026-10-12, when it moved
-  to the `slapstat` organization: `slapstat/fantasy-web`, the old name redirects). Its PRs need
-  not be up to date: auto-merge queues a green PR, and the queue tests it on top of `master`
-  and everything ahead of it. Don't `gh pr update-branch` a web PR; the other repos still
-  need it.
+- **fantasy-web merges through GitHub's merge queue** instead (since 2026-10-12). Its PRs need
+  not be up to date: a green PR goes into the queue, which tests it on top of `master` and
+  everything ahead of it. Don't `gh pr update-branch` a web PR; the other repos still need it.
 - **Dependabot PRs belong to the [`dependabot-round`](.claude/skills/dependabot-round/SKILL.md)
   skill** — nobody else merges them; it runs Monday mornings and comments on
   fantasy-workspace#70.
