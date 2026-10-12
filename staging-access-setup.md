@@ -22,7 +22,7 @@ ssh-keygen -t ed25519 -N '' -f ./staging-access-key -C 'staging-access'
 
 - **Private half** (`staging-access-key`) → secret `STAGING_ACCESS_SSH_KEY` in `fantasy-web`:
   ```bash
-  gh secret set STAGING_ACCESS_SSH_KEY --repo pgaberra/fantasy-web < ./staging-access-key
+  gh secret set STAGING_ACCESS_SSH_KEY --repo slapstat/fantasy-web < ./staging-access-key
   ```
 - **Public half** (`staging-access-key.pub`) → on the **staging server** (`62.238.17.178`) add
   to `/root/.ssh/authorized_keys`, pinned to the forced command (one line):
