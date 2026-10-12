@@ -90,8 +90,7 @@ guard enforces the same for every issue the round writes on.
 | `pgaberra/fantasy-espn-service` | `Build & Test` |
 | `pgaberra/fantasy-projection-service` | `Lint & Test` |
 
-**Every repo here but projection-service, fantasy-workspace included, is `slapstat/…` since
-2026-10-12.** The old names redirect, and the guard's allowlist and contract path still hold
+**Every repo here, fantasy-workspace included, is `slapstat/…` since 2026-10-12.** The old names redirect, and the guard's allowlist and contract path still hold
 `pgaberra/…`, so keep using the names in this file. fantasy-web also merges through GitHub's
 merge queue: its `master` does not require an up-to-date branch, so a web PR is never `BEHIND`
 for the merge's sake, and its merge command queues the PR instead of merging it.
