@@ -2,7 +2,7 @@
 
 Every night at 05:00 UTC the **"Staging reset"** workflow in this repo puts staging's user data
 back to a fixed baseline, an hour before the E2E suite runs against it. It closes
-pgaberra/fantasy-db-service#45.
+slapstat/fantasy-db-service#45.
 
 ## What the baseline is
 
@@ -36,7 +36,7 @@ staging and write it in the same `{"season", "playerIdSpace", "data"}` shape.
 
 ```bash
 ssh-keygen -t ed25519 -N '' -f ./staging-reset-key -C 'staging-reset'
-gh secret set STAGING_RESET_SSH_KEY --repo pgaberra/fantasy-workspace < ./staging-reset-key
+gh secret set STAGING_RESET_SSH_KEY --repo slapstat/fantasy-workspace < ./staging-reset-key
 ```
 
 The public half goes on the **staging** server (`62.238.17.178`), one line in
@@ -57,7 +57,7 @@ reinstall on the server. The key cannot reach the projection store, production, 
 Copy the `origin/master` blob of `staging_reset_forced.sh` to `/root/staging_reset_forced.sh`, check
 its sha256 against `git show origin/master:staging_reset_forced.sh | sha256sum`, and `chmod 700` it.
 
-### 3. Secrets in `pgaberra/fantasy-workspace`
+### 3. Secrets in `slapstat/fantasy-workspace`
 
 | Secret | Value |
 |---|---|

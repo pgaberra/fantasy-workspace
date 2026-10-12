@@ -46,7 +46,7 @@ jobs:
       # that adds a user table the reset does not know fails here, before staging is touched.
       - uses: actions/checkout@v7
         with:
-          repository: pgaberra/fantasy-db-service
+          repository: slapstat/fantasy-db-service
           path: services/db
           # The projection enums too: the seed's kind and preset must be values db-service reads.
           sparse-checkout: |
@@ -54,12 +54,12 @@ jobs:
             src/main/java/com/fantasy/db/projection
       - uses: actions/checkout@v7
         with:
-          repository: pgaberra/fantasy-yahoo-service
+          repository: slapstat/fantasy-yahoo-service
           path: services/yahoo
           sparse-checkout: src/main/resources/db/migration
       - uses: actions/checkout@v7
         with:
-          repository: pgaberra/fantasy-espn-service
+          repository: slapstat/fantasy-espn-service
           path: services/espn
           sparse-checkout: src/main/resources/db/migration
 

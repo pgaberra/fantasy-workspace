@@ -90,10 +90,11 @@ guard enforces the same for every issue the round writes on.
 | `pgaberra/fantasy-espn-service` | `Build & Test` |
 | `pgaberra/fantasy-projection-service` | `Lint & Test` |
 
-**fantasy-web is `slapstat/fantasy-web` since 2026-10-12** and merges through GitHub's merge
-queue. The old name redirects, and the guard's allowlist still holds `pgaberra/fantasy-web`, so
-keep using that name. Its `master` does not require an up-to-date branch: a web PR is never
-`BEHIND` for the merge's sake, and its merge command queues the PR instead of merging it.
+**Every repo here but projection-service, fantasy-workspace included, is `slapstat/…` since
+2026-10-12.** The old names redirect, and the guard's allowlist and contract path still hold
+`pgaberra/…`, so keep using the names in this file. fantasy-web also merges through GitHub's
+merge queue: its `master` does not require an up-to-date branch, so a web PR is never `BEHIND`
+for the merge's sake, and its merge command queues the PR instead of merging it.
 
 Each has a weekly Dependabot schedule with grouped PRs (`all-dependencies`, `all-security`,
 `all-actions`; projection-service also watches its Docker base image). Dependabot runs Sunday

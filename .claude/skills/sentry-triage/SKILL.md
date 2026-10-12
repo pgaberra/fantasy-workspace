@@ -111,15 +111,15 @@ Staging and production are the same projects, told apart by the issue's `environ
 |---|---|---|
 | `fantasy-web` | anything | `slapstat/fantasy-web` |
 | `fantasy-projection-service` | anything | `pgaberra/fantasy-projection-service` |
-| `java-spring-boot` | `com.fantasy.bff` | `pgaberra/fantasy-bff` |
-| `java-spring-boot` | `com.fantasy.db` | `pgaberra/fantasy-db-service` |
-| `java-spring-boot` | `com.fantasy.yahoo` | `pgaberra/fantasy-yahoo-service` |
-| `java-spring-boot` | `com.fantasy.espn` | `pgaberra/fantasy-espn-service` |
+| `java-spring-boot` | `com.fantasy.bff` | `slapstat/fantasy-bff` |
+| `java-spring-boot` | `com.fantasy.db` | `slapstat/fantasy-db-service` |
+| `java-spring-boot` | `com.fantasy.yahoo` | `slapstat/fantasy-yahoo-service` |
+| `java-spring-boot` | `com.fantasy.espn` | `slapstat/fantasy-espn-service` |
 
 `java-spring-boot` holds all four Spring services (fantasy-workspace#39). A culprit that matches
 no row, a pure `org.springframework…` frame for instance, is **not guessed at**: open the event's
 stack trace with the connector and route by the first `com.fantasy` frame. If there is none, file
-it in `pgaberra/fantasy-workspace` with `needs-human`. A wrong repo is worse than no repo,
+it in `slapstat/fantasy-workspace` with `needs-human`. A wrong repo is worse than no repo,
 because nobody who could act on it will look there.
 
 ## The four outcomes
@@ -212,7 +212,7 @@ many were left over; the next run takes them, because the watermark only moves o
 ## Always leave a trace
 
 **The part that is easiest to skip and the reason the round exists.** Finish every run, including
-one that found nothing and one that failed, by commenting on `pgaberra/fantasy-workspace#40`,
+one that found nothing and one that failed, by commenting on `slapstat/fantasy-workspace#40`,
 `Sentry triage run log`. Find it by that number, never by its title, which anyone can copy onto
 an issue of their own. It is locked, so only collaborators can comment; if it has been closed,
 reopen it. Post it through a body file like every other write (*How it writes to GitHub*): a run
@@ -227,7 +227,7 @@ Fix PRs: … Issues filed: … Commented: … Needs human: … Left for next run
 
 The watermark to read from is the newest `sentry-triage-watermark` marker **in a comment by
 `pgaberra`** in that thread, read with
-`gh issue view 40 -R pgaberra/fantasy-workspace --json comments --jq '.comments[] | select(.author.login == "pgaberra") | .body'`;
+`gh issue view 40 -R slapstat/fantasy-workspace --json comments --jq '.comments[] | select(.author.login == "pgaberra") | .body'`;
 with none, start 24 hours back. A marker by any other author is ignored, and so is one dated
 after the start of this run: a watermark in the future makes the round read nothing, which
 looks exactly like a quiet day. Say in the run log when either turned up. **The new watermark is the start of this run**, not the newest

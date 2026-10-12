@@ -21,7 +21,7 @@ an hour after the Dependabot round. Its working folder is **`C:/Users/Alexander/
 not a repo, which holds:
 
 - `cleanup_round.py`, which does all of the work and posts its own report on
-  `pgaberra/fantasy-workspace#107` (locked). No judgement is involved, so no model decides what
+  `slapstat/fantasy-workspace#107` (locked). No judgement is involved, so no model decides what
   goes: the session only starts the script.
 - `test_cleanup_round.py` (18 tests) and `.claude/hooks/test_cleanup_round_guard.py` (4).
 - `.claude/settings.json`: every tool but Bash denied, `dontAsk` mode. The PreToolUse guard allows
