@@ -90,6 +90,11 @@ guard enforces the same for every issue the round writes on.
 | `pgaberra/fantasy-espn-service` | `Build & Test` |
 | `pgaberra/fantasy-projection-service` | `Lint & Test` |
 
+**fantasy-web is `slapstat/fantasy-web` since 2026-10-12** and merges through GitHub's merge
+queue. The old name redirects, and the guard's allowlist still holds `pgaberra/fantasy-web`, so
+keep using that name. Its `master` does not require an up-to-date branch: a web PR is never
+`BEHIND` for the merge's sake, and its merge command queues the PR instead of merging it.
+
 Each has a weekly Dependabot schedule with grouped PRs (`all-dependencies`, `all-security`,
 `all-actions`; projection-service also watches its Docker base image). Dependabot runs Sunday
 22:00 Europe/Stockholm, so its PRs exist before the Monday round, and every version update has a
@@ -105,7 +110,8 @@ Dependabot and no CI. Other repos on the account are not this round's.
    `gh pr list -R <repo> --author app/dependabot --state open --json number,title,headRefName,headRefOid,mergeStateStatus,isDraft,createdAt`.
    Order each repo's PRs with security groups first (`all-security` in the branch name), then
    oldest first.
-3. **One PR at a time within a repo, every repo at once.** The rulesets require an up-to-date
+3. **One PR at a time within a repo, every repo at once** (fantasy-web excepted: its queue
+   orders the merges). The rulesets require an up-to-date
    branch, so merging one PR puts the rest of that repo's PRs behind: work a repo's PRs in order,
    and never update a second branch in a repo while the first is waiting. Across repos, start the
    first step in every repo before waiting on any, so one slow build does not hold up the others.
@@ -116,6 +122,10 @@ Dependabot and no CI. Other repos on the account are not this round's.
      `gh pr merge <n> -R <repo> --squash --match-head-commit <headRefOid>`, using the head just read.
      Confirm with `gh pr view <n> -R <repo> --json state,mergeCommit`. If GitHub or the guard
      refuses, read the PR again and act on what it says now. Never retry with other flags.
+     In fantasy-web a merge command that succeeds leaves the PR `OPEN`: it is in the merge queue,
+     which tests it on top of `master` and merges it a few minutes later. That is not a failure.
+     Go on to the repo's next PR without waiting, read the PR again before the run ends, and log
+     it as merged or "queued" depending on what that last read shows.
    - **`UNSTABLE`**: the required check passed and a check that is not required failed. GitHub
      allows the merge, so merge it as above, and name the failing check in the run log.
    - **`BEHIND`**: `gh pr update-branch <n> -R <repo>`, wait on the checks, read the PR again
