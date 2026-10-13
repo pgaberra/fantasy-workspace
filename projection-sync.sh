@@ -59,8 +59,19 @@
 # fails quietly is the whole problem this guards against: nothing breaks, no page errors, the
 # rookie markers just gently stop being true.
 #
+# One step is not part of the night at all: who is starting in goal tonight. Clubs confirm their
+# starter after the morning skate, some only at warm-ups, so a read at 04:30 UTC knows almost
+# nothing, and Daily Faceoff's page rewrites a past day with the final word, so a missed read is
+# gone. `--starting-goalies` runs `projection starting-goalies` alone, one page, several times a
+# game day (projection-starting-goalies.timer); the range projection reads the latest read of each
+# game, so a planner asked in the afternoon sees the afternoon's word. Out of season it does
+# nothing. It never touches the nightly run's state: a failed read is the next read's to repair,
+# and is reported to Sentry at once, since five a day failing quietly would look like a page with
+# nobody confirmed.
+#
 #   projection-sync.sh                    run the sync (the morning timer, or by hand)
 #   projection-sync.sh --retry            run it again only if today's run failed (the afternoon timer)
+#   projection-sync.sh --starting-goalies read tonight's starting goalies, nothing else (game-day timer)
 #   projection-sync.sh --find-container   print the service and container it would use, run nothing
 set -uo pipefail
 
@@ -255,14 +266,20 @@ case "${1:-}" in
     send_sentry() { :; } ;;  # somebody is at the terminal reading the answer
   --retry)
     MODE=retry ;;
+  --starting-goalies)
+    MODE=starters ;;
 esac
 
 # Without the DSN file every failure below reaches the journal and nothing else. health-monitor.sh
 # falls back to a DSN scavenged from a container; this does not, so say so on every run.
 [ -s "$DSN_FILE" ] || log "WARNING: no ${DSN_FILE}; failures will not reach Sentry"
 
-# Before any container is looked for: a retry with nothing to retry has nothing to look for.
-if [ "$FIND_ONLY" = 0 ]; then
+# Before any container is looked for: a retry with nothing to retry has nothing to look for. The
+# starting-goalies read is no attempt of the night's: it reads no state, writes none, and reports
+# every failure, as a retry does (`report_failure`).
+if [ "$MODE" = starters ]; then
+  ATTEMPT=2
+elif [ "$FIND_ONLY" = 0 ]; then
   ATTEMPT="$(plan_attempt "$MODE")"
   if [ -z "$ATTEMPT" ]; then
     log "retry: nothing to retry (today's run did not fail, or has been retried already)"
@@ -275,7 +292,7 @@ fi
 give_up() { # message sentry-message
   log "$1"
   report_failure "$2"
-  [ "$FIND_ONLY" = 1 ] || record_run failed
+  [ "$FIND_ONLY" = 1 ] || [ "$MODE" = starters ] || record_run failed
   exit 1
 }
 
@@ -305,6 +322,17 @@ fi
 SEASON="$(current_season)"
 TARGET="$(target_season)"
 failed=0
+
+# Tonight's starting goalies, and nothing else. Only in season: the page has no games to read in
+# the summer, and the timer fires every day of the year.
+if [ "$MODE" = starters ]; then
+  if in_season; then
+    run_step "projection starting-goalies" "Read starting goalies" projection starting-goalies
+  else
+    log "out of season (${SEASON} has the games, ${TARGET} is projected): no starting goalies"
+  fi
+  exit "$failed"
+fi
 
 # The second argument of each step is the front of the line that command prints when it has done
 # its work. It is what tells a real run from a `docker exec` into a container that has just been

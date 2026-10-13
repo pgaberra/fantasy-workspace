@@ -1,0 +1,16 @@
+# Installed on every server that runs projection-service as
+# /etc/systemd/system/projection-starting-goalies.service; the same file on staging and in
+# production. Pairs with projection-starting-goalies.timer. Reads who Daily Faceoff's starting
+# goalies page has in net today, one page, and nothing else; see `--starting-goalies` in
+# projection-sync.sh, and projection-sync-setup.md for the install.
+[Unit]
+Description=SlapStat projection store: read tonight's starting goalies from Daily Faceoff
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/root/projection-sync.sh --starting-goalies
+# One page and a few dozen rows. The cap only stops a hung page holding the unit open into the
+# next firing; the read itself takes seconds, and `run_step`'s deploy wait adds half a minute.
+TimeoutStartSec=10min

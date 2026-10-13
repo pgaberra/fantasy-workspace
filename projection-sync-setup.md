@@ -6,8 +6,8 @@ Nothing in Coolify or the service schedules it, and
 nothing deploys the files: they are copied onto each server by hand, so **a change merged here is
 not live on a server until someone installs it there.**
 
-The script and its four units (the nightly service and timer, and the afternoon retry's service and
-timer) are the same files on both servers. The script finds its
+The script and its six units (the nightly service and timer, the afternoon retry's service and
+timer, and the game-day starting-goalies service and timer) are the same files on both servers. The script finds its
 container by the Coolify label `coolify.serviceName` ending in `-projection-service`
 (`staging-projection-service`, `prod-projection-service`), so there is nothing to edit per host.
 
@@ -15,6 +15,9 @@ container by the Coolify label `coolify.serviceName` ending in `-projection-serv
 |---|---|---|
 | staging | `62.238.17.178` | yes, since August 2026; all five files copied 2026-09-11 20:33 UTC from workspace #53 (master 6879f49), checksums matched, both timers enabled; the off-schedule run after it succeeded |
 | production | `157.180.126.72` | **no** (as of 2026-09-11): prod-projection-service is v0.13.3, which lacks the sync's commands, and it is to be promoted together with the BFF and web rather than ahead of them (Alexander, 2026-09-11) |
+
+The starting-goalies service and timer (projection-service #282, `projection starting-goalies`) are
+**installed on neither server yet**; see section 6. Add a line to the table when they are.
 
 Update this table when either changes. Everything below runs from Git Bash on your machine,
 from any checkout of this repo, after `git fetch origin`. `HOST` is the server's IP.
@@ -65,7 +68,7 @@ has. Production's projection-service is far behind master, so first:
    (it logs a warning saying so). The health monitor copes without the file by borrowing a DSN from
    a container; the sync does not.
 
-## 1. Copy the five files from master
+## 1. Copy the seven files from master
 
 Straight from the `origin/master` blob, so a working copy on another branch or with CRLF endings
 cannot leak across. Keep the old script if there is one.
@@ -78,16 +81,18 @@ MSYS_NO_PATHCONV=1 git show origin/master:projection-sync.service | ssh root@$HO
 MSYS_NO_PATHCONV=1 git show origin/master:projection-sync.timer   | ssh root@$HOST 'cat > /etc/systemd/system/projection-sync.timer'
 MSYS_NO_PATHCONV=1 git show origin/master:projection-sync-retry.service | ssh root@$HOST 'cat > /etc/systemd/system/projection-sync-retry.service'
 MSYS_NO_PATHCONV=1 git show origin/master:projection-sync-retry.timer   | ssh root@$HOST 'cat > /etc/systemd/system/projection-sync-retry.timer'
+MSYS_NO_PATHCONV=1 git show origin/master:projection-starting-goalies.service | ssh root@$HOST 'cat > /etc/systemd/system/projection-starting-goalies.service'
+MSYS_NO_PATHCONV=1 git show origin/master:projection-starting-goalies.timer   | ssh root@$HOST 'cat > /etc/systemd/system/projection-starting-goalies.timer'
 ```
 
 ## 2. Compare checksums against master
 
 ```
-for f in projection-sync.sh projection-sync.service projection-sync.timer projection-sync-retry.service projection-sync-retry.timer; do MSYS_NO_PATHCONV=1 git show origin/master:$f | sha256sum; done
-ssh root@$HOST 'sha256sum /root/projection-sync.sh /etc/systemd/system/projection-sync.service /etc/systemd/system/projection-sync.timer /etc/systemd/system/projection-sync-retry.service /etc/systemd/system/projection-sync-retry.timer'
+for f in projection-sync.sh projection-sync.service projection-sync.timer projection-sync-retry.service projection-sync-retry.timer projection-starting-goalies.service projection-starting-goalies.timer; do MSYS_NO_PATHCONV=1 git show origin/master:$f | sha256sum; done
+ssh root@$HOST 'sha256sum /root/projection-sync.sh /etc/systemd/system/projection-sync.service /etc/systemd/system/projection-sync.timer /etc/systemd/system/projection-sync-retry.service /etc/systemd/system/projection-sync-retry.timer /etc/systemd/system/projection-starting-goalies.service /etc/systemd/system/projection-starting-goalies.timer'
 ```
 
-The five hashes must match pairwise. Do not go on if one does not.
+The seven hashes must match pairwise. Do not go on if one does not.
 
 ## 3. Check it finds the right container, before it runs anything
 
@@ -147,3 +152,44 @@ ssh root@$HOST 'cat /var/lib/projection-sync/last-run; journalctl -u projection-
 
 **A manual start is not the timer.** The job is running only once the journal shows a run that
 started at 04:30 to 04:45 UTC on its own. Look the morning after, and update the table at the top.
+
+## 6. The game-day starting-goalies timer
+
+`projection-starting-goalies.timer` runs `projection-sync.sh --starting-goalies` five times a day,
+at 10:00, 13:00, 16:00, 18:30 and 21:30 **US Eastern** (plus up to five minutes): one read of Daily
+Faceoff's starting goalies page each, and nothing else. The range projection reads the latest
+read of each game, so a goalie the page has confirmed is served as tonight's starter from the
+next read on (projection-service #282). Out of season the script logs `no starting goalies` and
+does nothing, so the timer can stay enabled all year. It never writes the nightly run's state
+file, and every failure goes to Sentry at once.
+
+Copy the files as in sections 1 and 2 (the script changed too). The read needs the container to
+have the command, a projection-service release that includes #282; check, which prints the help
+text and reads nothing:
+```
+ssh root@$HOST 'docker exec $(/root/projection-sync.sh --find-container | cut -d" " -f2) projection starting-goalies --help'
+```
+
+The timer names its times in `America/New_York`, so the box's systemd must understand a timezone
+in `OnCalendar` (systemd 235 or newer). Check that it reads the times as Eastern, with daylight
+saving:
+```
+ssh root@$HOST 'systemd-analyze calendar --iterations=3 "*-*-* 18:30:00 America/New_York"'
+```
+The `(in UTC)` line of each iteration must be 22:30 UTC while Eastern daylight time is in force
+and 23:30 UTC after the November change. Then enable it:
+```
+ssh root@$HOST 'systemctl daemon-reload && systemctl enable --now projection-starting-goalies.timer && systemctl list-timers "projection-starting-goalies*"'
+```
+
+To prove it now rather than at the next firing:
+```
+ssh root@$HOST 'systemctl start --no-block projection-starting-goalies.service'
+ssh root@$HOST 'journalctl -u projection-starting-goalies.service -n 20 --no-pager'
+```
+A good read logs a `Read starting goalies for <date>: N games, ... confirmed, ... likely, ...
+unconfirmed; M of S goalies matched to the store` line and the unit ends `status=0/SUCCESS`. A
+`Not in the store:` line names a goalie the page has in net whom the store does not know (a call-up
+the nightly roster sweep has not seen yet); his read is kept by name, and the first read after the
+store knows him places it. As with the nightly timer, **a manual start is not the timer**: it is running once the
+journal shows a read that started on its own at one of the five times.

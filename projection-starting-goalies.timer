@@ -1,0 +1,29 @@
+# Installed on every server that runs projection-service as
+# /etc/systemd/system/projection-starting-goalies.timer; the same file on staging and in production.
+#
+# Several times a day, in US Eastern time, because that is the clock clubs confirm by and the one
+# Daily Faceoff's "today" is. 10:00 catches the night-before and early-morning reports; 13:00 the
+# morning skates; 16:00 the afternoon announcements; 18:30 the warm-ups of the 19:00 games, which
+# are most of a night; 21:30 the warm-ups of the 22:00 western games. Every firing is in the US
+# afternoon or evening, when the UTC day is the US game day (the range projection drops a read
+# made before its game day by UTC day), and the last is the one exception that is still safe: at
+# 21:30 Eastern it is 01:30 or 02:30 UTC the next day, a read of tonight's games that the guard
+# lets through because it is not *before* them.
+#
+# The script does nothing out of season, so the timer can stay enabled all year. Not Persistent: a
+# read missed while the box was down is stale by the next firing anyway.
+[Unit]
+Description=Read tonight's starting goalies for the SlapStat projection store, several times a game day
+
+[Timer]
+OnCalendar=*-*-* 10:00:00 America/New_York
+OnCalendar=*-*-* 13:00:00 America/New_York
+OnCalendar=*-*-* 16:00:00 America/New_York
+OnCalendar=*-*-* 18:30:00 America/New_York
+OnCalendar=*-*-* 21:30:00 America/New_York
+# A few minutes of spread, so the site does not see us on the stroke of the hour every day.
+RandomizedDelaySec=5min
+Persistent=false
+
+[Install]
+WantedBy=timers.target
