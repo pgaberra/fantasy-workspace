@@ -274,6 +274,36 @@ for unit in projection-sync.service projection-sync-retry.service; do
     "$(grep -c '^StateDirectory=projection-sync$' "$DIR/$unit")"
 done
 
+echo "== the game-day timer reads the starting goalies, and nothing of the night's =="
+check "the starting-goalies service passes --starting-goalies" 1 \
+  "$(grep -c '^ExecStart=/root/projection-sync.sh --starting-goalies$' "$DIR/projection-starting-goalies.service")"
+for at in 10:00 13:00 16:00 18:30 21:30; do
+  check "the starting-goalies timer fires at ${at} Eastern" 1 \
+    "$(grep -c "^OnCalendar=\*-\*-\* ${at}:00 America/New_York\$" "$DIR/projection-starting-goalies.timer")"
+done
+# The read is the script's one starting-goalies step, and its block exits before the first of the
+# night's steps, so a game-day read never runs an ingest or a projection.
+read_step=$(grep -n '^    run_step "projection starting-goalies" "Read starting goalies" projection starting-goalies$' "$SCRIPT" | cut -d: -f1)
+starters_exit=$(grep -n '^  exit "\$failed"$' "$SCRIPT" | head -1 | cut -d: -f1)
+first_step=$(grep -n '^run_step "projection rosters"' "$SCRIPT" | cut -d: -f1)
+check "one starting-goalies step" 1 "$(grep -c 'run_step "projection starting-goalies"' "$SCRIPT")"
+if [ -n "$read_step" ] && [ -n "$starters_exit" ] && [ -n "$first_step" ] \
+  && [ "$read_step" -lt "$starters_exit" ] && [ "$starters_exit" -lt "$first_step" ]; then
+  pass=$((pass + 1))
+else
+  fail=$((fail + 1)); echo "  FAIL the starting-goalies read does not stop before the night's steps"
+fi
+# A read that cannot find its container fails without writing the night's state, which would
+# otherwise give the afternoon retry a failed "morning" to redo, or hide a real one.
+GIVE_UP=$(mktemp)
+sed -n '/^give_up()/,/^}/p' "$SCRIPT" > "$GIVE_UP"
+: > "$STATE/sentry"; rm -f "$STATE_FILE"
+( . "$GIVE_UP"; MODE=starters; FIND_ONLY=0; ATTEMPT=2; give_up "no container" "x" )
+check "a failed read writes no state" "absent" "$([ -e "$STATE_FILE" ] && echo present || echo absent)"
+check "and is reported" 1 "$(wc -l < "$STATE/sentry" | tr -d ' ')"
+( . "$GIVE_UP"; MODE=run; FIND_ONLY=0; ATTEMPT=1; date() { echo 2026-09-30; }; give_up "no container" "x" )
+check "where a failed night does" "2026-09-30 1 failed" "$(cat "$STATE_FILE" 2>/dev/null)"
+
 # The gap `run_step`'s own comment names: the markers are strings on both sides and nothing
 # checked that they still agree. A step whose marker no longer matches what the command prints
 # reports a failure on every clean run, which is the same alarm-that-cries-wolf this file exists
