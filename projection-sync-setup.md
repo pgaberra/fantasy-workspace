@@ -16,8 +16,13 @@ container by the Coolify label `coolify.serviceName` ending in `-projection-serv
 | staging | `62.238.17.178` | yes, since August 2026; all five files copied 2026-09-11 20:33 UTC from workspace #53 (master 6879f49), checksums matched, both timers enabled; the off-schedule run after it succeeded |
 | production | `157.180.126.72` | **no** (as of 2026-09-11): prod-projection-service is v0.13.3, which lacks the sync's commands, and it is to be promoted together with the BFF and web rather than ahead of them (Alexander, 2026-09-11) |
 
-The starting-goalies service and timer (projection-service #282, `projection starting-goalies`) are
-**installed on neither server yet**; see section 6. Add a line to the table when they are.
+The starting-goalies service and timer (projection-service #282, `projection starting-goalies`), see
+section 6:
+
+| Server | Installed |
+|---|---|
+| staging | yes: the script and both units copied 2026-10-13 21:52 UTC from workspace #117 (master 585e1c2), all seven checksums matched, timer enabled. A manual read at 21:54 UTC read 16 games (22 confirmed, 8 likely, 2 unconfirmed; 32 of 32 matched), and Pittsburgh's confirmed starter was served the whole night. The first timer firing is still to be seen. |
+| production | **no**: needs a projection-service release with #282 promoted first |
 
 Update this table when either changes. Everything below runs from Git Bash on your machine,
 from any checkout of this repo, after `git fetch origin`. `HOST` is the server's IP.
