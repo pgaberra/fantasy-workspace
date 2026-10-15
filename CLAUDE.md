@@ -119,14 +119,22 @@ of what's left.
    projection-service CI runs `ruff check`, `black --check`, `pytest` — `ruff format`
    alone proves nothing; a bare `mypy` is worth running on top).
 2. **New or changed logic has tests**, at the level that repo already tests at.
-3. **If the API changed**: spec regenerated, consumer's pinned copy under `specs/` updated
+3. **The diff has been reviewed by a second pass, not just its author:**
+   - **Bugs, every PR:** `/code-review` on the branch. Fix what it confirms; a finding
+     you reject gets one line in the PR body saying why.
+   - **Security, when the diff touches** auth or tokens, an endpoint or its validation,
+     the internal key, cookies, payments, SQL, file or URL input, secrets/config, or a
+     workflow: `/security-review` too. Same rule for findings.
+   - A finding is fixed at its cause like any other bug — never silenced, never widened
+     into a refactor (see [Say what you find](#say-what-you-find)).
+4. **If the API changed**: spec regenerated, consumer's pinned copy under `specs/` updated
    in the same change, generated client still compiling — catch drift before CI does.
-4. **The PR title reads as the squash commit message**, and the PR is not stale (see
+5. **The PR title reads as the squash commit message**, and the PR is not stale (see
    [CI / workflow](#ci--workflow)).
-5. **The PR body answers the three questions** in
+6. **The PR body answers the three questions** in
    [Fix from first principles](#fix-from-first-principles).
-6. **Non-obvious choices are recorded** (see [Decision log](#decision-log)).
-7. **The last mile is verified in the same session, not assumed** — merged is not
+7. **Non-obvious choices are recorded** (see [Decision log](#decision-log)).
+8. **The last mile is verified in the same session, not assumed** — merged is not
    deployed, deployed is not live, ingested is not used:
    - A merge reaches prod only when the draft release is published. For web and
      projection-service only Coolify's word counts — read the container's `APP_VERSION`,
