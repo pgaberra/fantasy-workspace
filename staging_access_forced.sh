@@ -6,21 +6,17 @@
 #
 #   command="/root/staging_access_forced.sh",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty ssh-ed25519 AAAA... staging-access
 #
-# Invoked as:
-#   ssh root@62.238.17.178 "open"    ->  expose :443 to everyone (any device / mobile data)
-#   ssh root@62.238.17.178 "lock"    ->  restore the owner-IP lockdown (the default state)
+# Invoked by "E2E (staging)" in fantasy-web, whose GitHub runner has a different IP on every run:
 #   ssh root@62.238.17.178 "allow"   ->  let the CALLER's own IPv4 through :443 for a while
 #   ssh root@62.238.17.178 "revoke"  ->  take the caller's own IPv4 back out
-# open/lock come from the "Staging access (open / lock)" workflow; allow/revoke from
-# "E2E (staging)", whose GitHub runner has a different IP on every run.
 #
-# allow/revoke take no argument: the IP is the one this SSH connection came from ($SSH_CLIENT),
+# Neither takes an argument: the IP is the one this SSH connection came from ($SSH_CLIENT),
 # so the key can only ever let its own caller in, never name someone else. An allowed IP carries
 # an iptables time match and stops matching ALLOW_TTL_MINUTES after it was added, so a runner
 # that dies before its revoke step leaves a dead rule rather than an open door; every call sweeps
 # the dead ones.
 #
-# It can ONLY change the pre-launch HTTPS IP gate — nothing else.
+# It can ONLY let its own caller through the pre-launch HTTPS IP gate — nothing else.
 set -euo pipefail
 
 ALLOW_TTL_MINUTES=90
@@ -65,17 +61,6 @@ delete_rules
 
 MODE="${SSH_ORIGINAL_COMMAND:-}"
 case "$MODE" in
-  open)
-    FLUSH=1 /root/ip-allowlist.sh
-    echo "ok: staging access OPEN (HTTPS reachable from any IP)"
-    ;;
-  lock)
-    # Re-applies the stored owner-IP allow-list, the same invocation ip-allowlist.service uses on
-    # boot. Its DROP goes back in at the top, above any runner still allowed, so a lock does cut
-    # a running E2E suite short; that is accepted as rare.
-    /root/ip-allowlist.sh
-    echo "ok: staging access LOCKED (HTTPS restricted to the owner IP)"
-    ;;
   allow)
     IP="$(caller_ipv4)"
     delete_rules "$IP"
@@ -91,7 +76,7 @@ case "$MODE" in
     echo "ok: $IP no longer allowed through :443"
     ;;
   *)
-    echo "refused: expected 'open', 'lock', 'allow' or 'revoke', got '$MODE'" >&2
+    echo "refused: expected 'allow' or 'revoke', got '$MODE'" >&2
     exit 1
     ;;
 esac
