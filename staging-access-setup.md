@@ -1,18 +1,10 @@
-# Staging access toggle — one-time setup
+# Staging access for E2E — one-time setup
 
-A GitHub Actions workflow (`fantasy-web` → Actions → **"Staging access (open / lock)"** → Run
-workflow) that opens the staging server's HTTPS firewall so you can reach
-`https://staging.slapstat.com` from any device (e.g. a phone on mobile data), or re-locks it.
-
-It runs over a **restricted SSH key** whose only allowed action is
+Staging (`https://staging.slapstat.com`) is locked to the owner's IP by `ip-allowlist.sh`.
+`E2E (staging)` in `fantasy-web` gets through on its own: it calls `allow` before the tests and
+`revoke` after them, over a **restricted SSH key** whose only allowed action is
 `/root/staging_access_forced.sh` on the **staging** server — the same forced-command pattern as
-`promote-to-prod`. The firewall change happens server-side; you just press "Run".
-
-> Why a toggle and not "whitelist my IP": a phone on mobile data has a **dynamic** (often CGNAT)
-> IP, and the workflow runs on a GitHub runner that can't see your phone's IP anyway — so the
-> only thing that reliably works for mobile is open ⇄ lock. While "open", staging is public
-> (no prod data; prod is unaffected) — keep the window short, or use Cloudflare Access for a
-> permanent identity gate.
+`promote-to-prod`.
 
 ## 1. Restricted SSH key (you generate)
 
@@ -33,36 +25,32 @@ ssh-keygen -t ed25519 -N '' -f ./staging-access-key -C 'staging-access'
 ## 2. Install the forced-command script on the staging server
 
 Copy `staging_access_forced.sh` to `/root/staging_access_forced.sh` on `62.238.17.178` and
-`chmod 700` it. Confirm the `lock` branch matches how your `ip-allowlist.sh` re-locks (see the
-comment in the script).
+`chmod 700` it.
 
-## Use it
+## How the E2E runner gets through
 
-`fantasy-web` → **Actions** → **"Staging access (open / lock)"** → **Run workflow** → pick
-`open` (reach staging from anywhere) or `lock` (restore the owner-IP gate). Works from the
-GitHub mobile app / browser too.
+The server lets in only the IP the SSH connection came from, over HTTPS, and the rule carries an
+iptables time match that stops it matching after 90 minutes, so a runner that dies before
+`revoke` does not leave a door open; every call to the script sweeps expired rules. Re-running
+`/root/ip-allowlist.sh` on the box while a suite is running puts its DROP back above the runner's
+rule, shuts that runner out and reddens the run.
 
-**Locked is the default.** Leave staging on `lock` except for a short `open` window.
+The workflow pins the staging server's SSH host key, so no blind trust-on-first-use.
 
-## The E2E suite gets through on its own
-
-`E2E (staging)` in `fantasy-web` uses the same key to call `allow` before the tests and `revoke`
-after them. The server lets in only the IP the SSH connection came from, over HTTPS, and the rule
-carries an iptables time match that stops it matching after 90 minutes, so a runner that dies
-before `revoke` does not leave a door open; every call to the script sweeps expired rules. Running
-`lock` while a suite is running shuts that runner out and reddens the run.
-
-Anything else that has to reach staging from outside is shut out while it is locked, unless its
-addresses are in `/root/ip-allowlist.extra`. No external uptime check watches staging for that
-reason; Sentry's, which did, is disabled, and UptimeRobot watches production.
+Anything else that has to reach staging from outside is shut out, unless its addresses are in
+`/root/ip-allowlist.extra`. No external uptime check watches staging for that reason; Sentry's,
+which did, is disabled, and UptimeRobot watches production.
 
 ## Services let through the lock
 
 `ip-allowlist.sh` (versioned here, installed as `/root/ip-allowlist.sh`) also lets through every
 IPv4 in `/root/ip-allowlist.extra`, installed from `ip-allowlist.staging.extra`. Today that is
 Stripe's webhook senders, so test-mode webhooks reach `api.staging.slapstat.com`. The rules are
-re-applied on boot and on every `lock`. After changing the file, run `/root/ip-allowlist.sh` on the
-box or `lock` from the workflow. A file with a line that is not an IPv4 address is refused before
-any rule is touched.
+re-applied on boot. After changing the file, run `/root/ip-allowlist.sh` on the box. A file with a
+line that is not an IPv4 address is refused before any rule is touched.
 
-> The workflow pins the staging server's SSH host key, so no blind trust-on-first-use.
+## Opening staging by hand
+
+There is no workflow for it any more (removed in slapstat/fantasy-web#1217). On the box,
+`FLUSH=1 /root/ip-allowlist.sh` opens HTTPS to everyone and `/root/ip-allowlist.sh` locks it
+again. Locked is the default; keep any open window short.

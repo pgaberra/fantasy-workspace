@@ -1,6 +1,6 @@
 # Let through staging's locked HTTPS gate by ip-allowlist.sh, one IPv4 per line.
 # Install on the STAGING server as /root/ip-allowlist.extra, then run /root/ip-allowlist.sh
-# (or the "lock" mode of the staging-access workflow) to apply it.
+# to apply it.
 #
 # Stripe's webhook senders, so test-mode webhooks reach api.staging.slapstat.com.
 # Source: https://stripe.com/files/ips/ips_webhooks.json, read 2026-09-17. Stripe announces changes

@@ -9,10 +9,10 @@
 #
 # Change the owner IP by changing the ALLOW_IP default below (in the monorepo, then reinstall) and
 # running the script. `ALLOW_IP=<new> /root/ip-allowlist.sh` works for that one run only: the next
-# boot or `lock` applies the default again.
+# boot applies the default again.
 #
 # Install on the STAGING server (62.238.17.178) as /root/ip-allowlist.sh; ip-allowlist.service
-# runs it on boot and staging_access_forced.sh runs it on `lock`. Services that must reach staging
+# runs it on boot. Services that must reach staging
 # from outside while it is locked (Stripe's webhooks) are listed one IPv4 per line in EXTRA_FILE,
 # installed from ip-allowlist.staging.extra in the monorepo root.
 set -euo pipefail
